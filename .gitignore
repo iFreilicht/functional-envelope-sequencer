@@ -1,1 +1,12 @@
-.direnv
+# Ignore all dotfiles except git dotfiles
+.*
+!.git*
+
+# Binaries and build targets
+*.a
+*.so
+*.dylib
+*.dll
+/build
+/dep
+/dist

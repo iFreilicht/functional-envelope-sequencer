@@ -1,0 +1,16 @@
+{
+  "slug": "FreilitePlugins",
+  "name": "Freilite Plugins",
+  "version": "2.0.0",
+  "license": "proprietary",
+  "brand": "Freilite",
+  "author": "Felix Uhl",
+  "authorEmail": "vcv@mail.felix-uhl.de",
+  "authorUrl": "",
+  "pluginUrl": "",
+  "manualUrl": "",
+  "sourceUrl": "",
+  "donateUrl": "https://ko-fi.com/ifreilicht",
+  "changelogUrl": "",
+  "modules": []
+}
