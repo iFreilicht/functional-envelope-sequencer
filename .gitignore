@@ -1,6 +1,4 @@
-# Ignore all dotfiles except git dotfiles
-.*
-!.git*
+.direnv
 
 # Binaries and build targets
 *.a
