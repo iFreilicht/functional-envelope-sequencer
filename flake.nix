@@ -15,7 +15,7 @@
         # Add or remove systems from this list if your project can be developed on them or not
         # See https://github.com/numtide/flake-utils/blob/main/allSystems.nix for a complete list
         x86_64-linux
-        aarch64-linux
+        # aarch64-linux (VCV Rack SDK is not available for Linux on ARM yet)
         x86_64-darwin
         aarch64-darwin
       ];
@@ -24,13 +24,15 @@
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
+        rack-sdk = pkgs.callPackage nix/rack-sdk.nix { };
       in
       {
+        packages = { inherit rack-sdk; };
         devShell = pkgs.mkShell {
           # Only tested for macOS right now, see https://vcvrack.com/manual/Building
           # for Linux dependencies
           buildInputs = with pkgs; [
-            (callPackage nix/rack-sdk.nix { })
+            rack-sdk
             wget
             cmake
             autoconf
