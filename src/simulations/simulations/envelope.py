@@ -1,4 +1,21 @@
+from dataclasses import dataclass
 import math
+
+# Max and min values for inputs.
+# Maximum is slightly larger than one so asserts don't
+# fail because of inaccurate float values
+SHAPE_MIN = 0.0
+SHAPE_MAX = 1.001
+AMPLITUDE_MIN = 0.0
+AMPLITUDE_LOWER_CUTOFF = 0.01
+AMPLITUDE_MAX = 1.001
+PROGRESS_MIN = 0.0
+PROGRESS_MAX = 1.001
+
+# Loop timing
+TIME_START = 0.0
+TIME_END = 2.0
+TIME_MIDPOINT = (TIME_START + TIME_END) / 2
 
 
 def a_d_shape(shape: float, progress: float) -> float:
@@ -8,8 +25,9 @@ def a_d_shape(shape: float, progress: float) -> float:
 
     $$f\left(x\right)=\left(1-s\right)x^{\left(1+s\right)}+sx^{10^{s}}$$
     """
-    assert 0 <= progress <= 1.001
-    assert 0 <= shape <= 1
+    assert PROGRESS_MIN <= progress <= PROGRESS_MAX
+    assert SHAPE_MIN <= shape <= SHAPE_MAX
+
     EXPONENT = 10.0  # Exponent for "quadratic" envelope, eyeballed in Desmos
     s, x = shape, progress
     lin = x  # Linear envelope, should be the only one when shape is 0
@@ -21,17 +39,24 @@ def a_d_shape(shape: float, progress: float) -> float:
     return interpolated
 
 
-TIME_START = 0
-TIME_END = 2
-TIME_MIDPOINT = (TIME_START + TIME_END) / 2
+@dataclass(frozen=True)
+class EnvelopeSettings:
+    attack: float
+    decay: float
+    shape: float
+    amplitude: float
 
-SHAPE_MIN = 0
-SHAPE_MAX = 1
+    def __post_init__(self):
+        assert TIME_START <= self.attack <= TIME_MIDPOINT
+        assert TIME_START <= self.decay <= TIME_MIDPOINT
+        assert SHAPE_MIN <= self.shape <= SHAPE_MAX
+        assert AMPLITUDE_MIN <= self.amplitude <= AMPLITUDE_MAX
+
+    def is_disabled(self):
+        return self.amplitude <= AMPLITUDE_LOWER_CUTOFF
 
 
-def a_d_envelope(
-    attack: float, decay: float, shape: float, amplitude: float, time: float
-) -> float:
+def a_d_envelope(settings: EnvelopeSettings, time: float) -> float:
     """Function describing a single Attack/Decay (A/D) envelope that is fixed in an interval between
     `time=TIME_START` and `time=TIME_END`, with the peak always occurring at `time=TIME_MIDPOINT`.
 
@@ -43,11 +68,15 @@ def a_d_envelope(
     3. From `TIME_MIPOINT` to `TIME_MIDPOINT + decay`, return the decay envelope based on `shape`
     4. From `TIME_MIDPOINT + decay` to `TIME_END`, return 0
     """
-    assert TIME_START <= attack <= TIME_MIDPOINT
-    assert TIME_START <= decay <= TIME_MIDPOINT
-    assert SHAPE_MIN <= shape <= SHAPE_MAX
+    attack, decay, shape, amplitude = (
+        settings.attack,
+        settings.decay,
+        settings.shape,
+        settings.amplitude,
+    )
+
     assert TIME_START <= time <= TIME_END
-    if amplitude < 0.01:
+    if amplitude < settings.is_disabled():
         return 0.0
 
     # Attack phase
@@ -68,3 +97,27 @@ def a_d_envelope(
         value = a_d_shape(shape, progress)
 
     return value * amplitude
+
+
+@dataclass(frozen=True)
+class EnvelopeStatus:
+    time: float
+    value: float
+
+
+def offset_envelopes(
+    envelopes_settings: list[EnvelopeSettings], time: float
+) -> list[EnvelopeStatus]:
+    """Function calculating offset envelope values."""
+    envelopes_status: list[EnvelopeStatus] = []
+    # TODO: How can I know the number of envelopes in practice? For example,
+    # when a user connects the time-output of one envelope to the time-input
+    # of another to create a shortcut? Is that just an impossible feature?
+    num_envs = len(envelopes_settings)
+    offset = (TIME_START + TIME_END) / num_envs
+    times_offset = [(time - offset * i) % TIME_END for i in range(num_envs)]
+    for env_settings, env_time in zip(envelopes_settings, times_offset):
+        value = a_d_envelope(env_settings, env_time)
+        envelopes_status.append(EnvelopeStatus(time=env_time, value=value))
+
+    return envelopes_status
