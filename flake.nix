@@ -4,10 +4,14 @@
   inputs.nixpkgs.url = "github:NixOS/nixpkgs";
   inputs.flake-utils.url = "github:numtide/flake-utils";
 
+  inputs.nixpkgs-unfree.url = "github:numtide/nixpkgs-unfree";
+  inputs.nixpkgs-unfree.inputs.nixpkgs.follows = "nixpkgs";
+
   outputs =
     {
       self,
       nixpkgs,
+      nixpkgs-unfree,
       flake-utils,
     }:
     let
@@ -24,15 +28,24 @@
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
+        pkgs-unfree = nixpkgs-unfree.legacyPackages.${system};
         rack-sdk = pkgs.callPackage nix/rack-sdk.nix { };
       in
       {
-        packages = { inherit rack-sdk; };
+        packages = {
+          inherit rack-sdk;
+          vcv-rack = pkgs-unfree.vcv-rack;
+        };
         devShell = pkgs.mkShell {
           # Only tested for macOS right now, see https://vcvrack.com/manual/Building
           # for Linux dependencies
           buildInputs = with pkgs; [
+            # Useful for testing, launch from terminal like so:
+            #   Rack
+            pkgs-unfree.vcv-rack
+            # Rack SDK, see package definition
             rack-sdk
+            # Requirements listed for macOS
             wget
             cmake
             autoconf
