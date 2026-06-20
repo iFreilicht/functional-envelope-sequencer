@@ -23,3 +23,7 @@ Feel free to adjust the $a$ (attack), $d$ (decay) and $s$ (shape) values to get 
 2. You always get the same result for the same inputs, there's no dependency on previous actions
 
 The final trick now is to generate multiple of these simple envelopes at overlapping time intervals and interpolate between them in some way to get a sequence.
+
+## Development
+
+This repository provides a Nix Flake and direnv-config. To start development, install any Nix-compatible package manager (I recommend [Lix](https://lix.systems/install/)) and run `nix shell` in this repo or additionally install direnv and run `direnv allow`. If you're using vscode, extension recommendations are provided.
