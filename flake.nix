@@ -30,6 +30,7 @@
           # Only tested for macOS right now, see https://vcvrack.com/manual/Building
           # for Linux dependencies
           buildInputs = with pkgs; [
+            (callPackage nix/rack-sdk.nix { })
             wget
             cmake
             autoconf
@@ -40,8 +41,7 @@
             zstd
             pkg-config
           ];
-          shellHook = ''
-          '';
+          shellHook = "";
         };
       }
     );
