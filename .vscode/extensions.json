@@ -2,5 +2,8 @@
     "recommendations": [
         "jnoortheen.nix-ide",
         "mkhl.direnv",
+        "ms-toolsai.jupyter",
+        "ms-python.python",
+        "detachhead.basedpyright",
     ]
 }

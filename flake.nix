@@ -55,8 +55,12 @@
             python3
             zstd
             pkg-config
+            # Additional requirements for scripts and experiments
+            uv
           ];
-          shellHook = "";
+          shellHook = ''
+            uv sync
+          '';
         };
       }
     );
