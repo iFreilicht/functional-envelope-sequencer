@@ -4,4 +4,41 @@ version = "0.1.0"
 description = "Functional Envelope Sequencer; scripts and experiments"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "simulations",
+    "ipykernel>=7.3.0",
+    "matplotlib>=3.11.0",
+    "numpy>=2.4.6",
+    "ruff>=0.15.18",
+    "basedpyright>=1.39.8",
+]
+
+[project.scripts]
+check = "scripts.check:main"
+
+[tool.hatch.build.targets.wheel.sources]
+"src/scripts" = "scripts"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv.sources]
+simulations = { workspace = true }
+
+[tool.uv.workspace]
+members = ["src/simulations", "src/notebooks"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/scripts"]
+
+[tool.hatch.build.targets.wheel]
+include = ["src/scripts"]
+
+[tool.pyright]
+executionEnvironments = [
+    { root = "src/simulations" },
+    { root = "src/notebooks", extraPaths = [
+        "src/simulations",
+    ], reportUnusedCallResult = false, reportUnknownMemberType = false, reportAny = false },
+]

@@ -8,3 +8,6 @@
 /build
 /dep
 /dist
+
+# Python
+__pycache__
