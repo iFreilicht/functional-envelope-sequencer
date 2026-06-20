@@ -5,5 +5,6 @@
         "ms-toolsai.jupyter",
         "ms-python.python",
         "detachhead.basedpyright",
+        "yzhang.markdown-all-in-one",
     ]
 }
