@@ -1,4 +1,6 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
+from itertools import pairwise
 import math
 
 # Max and min values for inputs.
@@ -13,6 +15,8 @@ PROGRESS_MIN = 0.0
 PROGRESS_MAX = 1.001
 
 # Loop timing
+# No need for slightly larger maximum because time is always treated
+# module TIME_END, so this value is never actually reached
 TIME_START = 0.0
 TIME_END = 2.0
 TIME_MIDPOINT = (TIME_START + TIME_END) / 2
@@ -102,11 +106,21 @@ def a_d_envelope(settings: EnvelopeSettings, time: float) -> float:
 @dataclass(frozen=True)
 class EnvelopeStatus:
     time: float
+    """The current time input that was used to generate `value`, or, in other words,
+    how much time has passed since this envelope started.
+    
+    Is expected to wrap back to `TIME_START` once `TIME_END` is reached.
+    """
+
     value: float
+
+    def __post_init__(self):
+        assert TIME_START <= self.time <= TIME_END
+        assert AMPLITUDE_MIN <= self.value <= AMPLITUDE_MAX
 
 
 def offset_envelopes(
-    envelopes_settings: list[EnvelopeSettings], time: float
+    envelopes_settings: Sequence[EnvelopeSettings], time: float
 ) -> list[EnvelopeStatus]:
     """Function calculating offset envelope values."""
     envelopes_status: list[EnvelopeStatus] = []
@@ -121,3 +135,38 @@ def offset_envelopes(
         envelopes_status.append(EnvelopeStatus(time=env_time, value=value))
 
     return envelopes_status
+
+
+def combine_envelopes_max(envelopes_status: Sequence[EnvelopeStatus]) -> float:
+    left_envelope: EnvelopeStatus = envelopes_status[0]
+    right_envelope: EnvelopeStatus = envelopes_status[0]
+    # The iteration here might be slightly confusing; the status-list is ordered from
+    # left to right on the timeline, so early to late.
+    # However, the time values are descending, because they measure the time that has passed
+    # since the start of the envelope, meaning later envelopes have lower time values.
+    # Consider the example below, where `envelopes_status` has eight elements,
+    # represented by the letters a-h. `y` is the value of the `EnvelopeStatus.time` attribute,
+    # `x` is the `time`-parameter of this function.
+    #
+    #               y
+    #      TIME_END ^    a b c d e f g h
+    #               |    / / / / / / / /
+    #               |   / / / / / / / /
+    # TIME_MIDPOINT |  / /×/ / / / / /
+    #               | / / / / / / / /
+    #               |/ / /|/ / / / /
+    #    TIME_START +--------------------> x
+    #                     |
+    #   Exact value of `time` passed to this function invocation
+    #
+    # The `×` is the point that we are trying to inspect, where `x=time` and
+    # `status.time=TIME_MIDPOINT`. Specifically, we're trying to find the two envelopes to
+    # the left and to the right of `×` because those are the two whose peaks the current
+    # `time` lies between, meaning they are the ones we need to combine.
+    for left, right in pairwise((*envelopes_status, envelopes_status[0])):
+        if left.time > TIME_MIDPOINT >= right.time:
+            left_envelope = left
+            right_envelope = right
+            break
+
+    return max(left_envelope.value, right_envelope.value)
