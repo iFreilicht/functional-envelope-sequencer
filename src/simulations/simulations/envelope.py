@@ -191,3 +191,12 @@ def combine_envelopes(
 def combine_max(left: EnvelopeStatus, right: EnvelopeStatus) -> float:
     """Combine two adjacent envelopes by choosing the higher value."""
     return max(left.value, right.value)
+
+
+def combine_interpolate_linear(left: EnvelopeStatus, right: EnvelopeStatus) -> float:
+    """Combine two adjacent envelopes by interpolating between them linearly."""
+    scale = 1 / (right.time - left.time)
+    raw_weight = TIME_MIDPOINT - left.time
+    weight = raw_weight * scale
+    interpolated = (1 - weight) * left.value + weight * right.value
+    return interpolated
