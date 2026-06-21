@@ -11,6 +11,7 @@ dependencies = [
     "numpy>=2.4.6",
     "ruff>=0.15.18",
     "basedpyright>=1.39.8",
+    "ipympl>=0.10.0",
 ]
 
 [project.scripts]
@@ -40,5 +41,5 @@ executionEnvironments = [
     { root = "src/simulations" },
     { root = "src/notebooks", extraPaths = [
         "src/simulations",
-    ], reportUnusedCallResult = false, reportUnknownMemberType = false, reportAny = false },
+    ], reportUnusedCallResult = false, reportUnknownMemberType = false, reportUnknownArgumentType = false, reportAny = false },
 ]
