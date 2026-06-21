@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import pairwise
 import math
+from typing import Callable
 
 # Max and min values for inputs.
 # Maximum is slightly larger than one so asserts don't
@@ -137,36 +138,56 @@ def offset_envelopes(
     return envelopes_status
 
 
-def combine_envelopes_max(envelopes_status: Sequence[EnvelopeStatus]) -> float:
-    left_envelope: EnvelopeStatus = envelopes_status[0]
-    right_envelope: EnvelopeStatus = envelopes_status[0]
-    # The iteration here might be slightly confusing; the status-list is ordered from
-    # left to right on the timeline, so early to late.
-    # However, the time values are descending, because they measure the time that has passed
-    # since the start of the envelope, meaning later envelopes have lower time values.
-    # Consider the example below, where `envelopes_status` has eight elements,
-    # represented by the letters a-h. `y` is the value of the `EnvelopeStatus.time` attribute,
-    # `x` is the `time`-parameter of this function.
-    #
-    #               y
-    #      TIME_END ^    a b c d e f g h
-    #               |    / / / / / / / /
-    #               |   / / / / / / / /
-    # TIME_MIDPOINT |  / /×/ / / / / /
-    #               | / / / / / / / /
-    #               |/ / /|/ / / / /
-    #    TIME_START +--------------------> x
-    #                     |
-    #   Exact value of `time` passed to this function invocation
-    #
-    # The `×` is the point that we are trying to inspect, where `x=time` and
-    # `status.time=TIME_MIDPOINT`. Specifically, we're trying to find the two envelopes to
-    # the left and to the right of `×` because those are the two whose peaks the current
-    # `time` lies between, meaning they are the ones we need to combine.
+def combine_envelopes(
+    envelopes_status: Sequence[EnvelopeStatus],
+    combiner: Callable[[EnvelopeStatus, EnvelopeStatus], float],
+) -> float:
+    """
+    Find the two envelopes whose peaks are currently closest and call `combiner`
+    on them to get a combined value.
+
+    Consider the example below, where `envelopes_status` has eight elements,
+    represented by the letters a-h. `y` is the value of the `EnvelopeStatus.time` attribute,
+    `x` is the global timeline, `t` is the current global time.
+
+    ```
+                  y
+         TIME_END ^    a b c d e f g h
+                  |    / / / / / / / /
+                  |   / / / / / / / /
+    TIME_MIDPOINT |  / /⊙/ / / / / /
+                  | / / / / / / / /
+                  |/ / /|/ / / / /
+       TIME_START +--------------------> x
+                        |
+                        t
+    ```
+
+    The `⊙` is the point that we are trying to inspect, where `x=time` and
+    `status.time=TIME_MIDPOINT`. Specifically, we're trying to find the two envelopes to
+    the left and to the right of `⊙` because those are the two whose peaks the current
+    `time` lies between, meaning they are the ones we need to combine.
+
+    The above illustration is somewhat inaccurate; the slope of the envelopes' time-value
+    might be much shallower and they might be closer together, so it is very possible that multiple
+    slopes overlap at once.
+
+    We might want to consider an option in the future that allows combining more than just the
+    closest envelopes, but for now this limitation makes the system easier to understand and
+    implement.
+    """
+
     for left, right in pairwise((*envelopes_status, envelopes_status[0])):
         if left.time > TIME_MIDPOINT >= right.time:
-            left_envelope = left
-            right_envelope = right
-            break
+            return combiner(left, right)
 
-    return max(left_envelope.value, right_envelope.value)
+    msg = (
+        f"{TIME_MIDPOINT=} is not in between any of the provided "
+        f"time values {[s.time for s in envelopes_status]}"
+    )
+    raise ValueError(msg)
+
+
+def combine_max(left: EnvelopeStatus, right: EnvelopeStatus) -> float:
+    """Combine two adjacent envelopes by choosing the higher value."""
+    return max(left.value, right.value)
