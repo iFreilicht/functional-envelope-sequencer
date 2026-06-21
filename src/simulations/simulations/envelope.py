@@ -30,8 +30,8 @@ def a_d_shape(shape: float, progress: float) -> float:
 
     $$f\left(x\right)=\left(1-s\right)x^{\left(1+s\right)}+sx^{10^{s}}$$
     """
-    assert PROGRESS_MIN <= progress <= PROGRESS_MAX
-    assert SHAPE_MIN <= shape <= SHAPE_MAX
+    assert PROGRESS_MIN <= progress <= PROGRESS_MAX, f"{progress} is outside of limits!"
+    assert SHAPE_MIN <= shape <= SHAPE_MAX, f"{shape} is outside of limits!"
 
     EXPONENT = 10.0  # Exponent for "quadratic" envelope, eyeballed in Desmos
     s, x = shape, progress
@@ -87,7 +87,7 @@ def a_d_envelope(settings: EnvelopeSettings, time: float) -> float:
     # Attack phase
     if time <= TIME_MIDPOINT:
         start = TIME_MIDPOINT - attack
-        if time < start:
+        if time < start or attack == 0.0:
             return 0.0
 
         progress = (time - start) / attack
@@ -95,7 +95,7 @@ def a_d_envelope(settings: EnvelopeSettings, time: float) -> float:
     # Decay phase
     else:
         end = TIME_MIDPOINT + decay
-        if time > end:
+        if time > end or decay == 0.0:
             return 0.0
 
         progress = (-time + end) / decay
