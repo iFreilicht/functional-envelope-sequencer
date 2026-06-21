@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import pairwise
 import math
-from typing import Callable
+from typing import Protocol
 
 # Max and min values for inputs.
 # Maximum is slightly larger than one so asserts don't
@@ -121,26 +121,27 @@ class EnvelopeStatus:
 
 
 def offset_envelopes(
-    envelopes_settings: Sequence[EnvelopeSettings], time: float
+    envelopes_settings: Sequence[EnvelopeSettings], interval: float, time: float
 ) -> list[EnvelopeStatus]:
-    """Function calculating offset envelope values."""
+    """Function calculating values at `time` for envelopes defined by `envelopes_settings`
+    spaced apart evenly with peaks occurring every `interval`."""
     envelopes_status: list[EnvelopeStatus] = []
-    # TODO: How can I know the number of envelopes in practice? For example,
-    # when a user connects the time-output of one envelope to the time-input
-    # of another to create a shortcut? Is that just an impossible feature?
-    num_envs = len(envelopes_settings)
-    offset = (TIME_START + TIME_END) / num_envs
-    times_offset = [(time - offset * i) % TIME_END for i in range(num_envs)]
-    for env_settings, env_time in zip(envelopes_settings, times_offset):
+    for i, env_settings in enumerate(envelopes_settings):
+        env_time = (time - interval * i) % TIME_END
         value = a_d_envelope(env_settings, env_time)
         envelopes_status.append(EnvelopeStatus(time=env_time, value=value))
 
     return envelopes_status
 
 
+class CombineFn(Protocol):
+    @staticmethod
+    def __call__(left: EnvelopeStatus, right: EnvelopeStatus) -> float: ...
+
+
 def combine_envelopes(
     envelopes_status: Sequence[EnvelopeStatus],
-    combiner: Callable[[EnvelopeStatus, EnvelopeStatus], float],
+    combiner: CombineFn,
 ) -> float:
     """
     Find the two envelopes whose peaks are currently closest and call `combiner`
