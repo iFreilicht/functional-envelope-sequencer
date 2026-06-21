@@ -12,5 +12,12 @@
   "sourceUrl": "",
   "donateUrl": "https://ko-fi.com/ifreilicht",
   "changelogUrl": "",
-  "modules": []
+  "modules": [
+    {
+      "slug": "FES8",
+      "name": "FES8",
+      "description": "8-step functional envelope sequencer",
+      "tags": []
+    }
+  ]
 }
