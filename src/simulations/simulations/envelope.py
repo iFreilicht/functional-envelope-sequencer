@@ -140,6 +140,7 @@ class CombineFn(Protocol):
 
 
 def combine_envelopes(
+    envelopes_settings: Sequence[EnvelopeSettings],
     envelopes_status: Sequence[EnvelopeStatus],
     combiner: CombineFn,
 ) -> float:
@@ -173,20 +174,33 @@ def combine_envelopes(
     might be much shallower and they might be closer together, so it is very possible that multiple
     slopes overlap at once.
 
-    We might want to consider an option in the future that allows combining more than just the
-    closest envelopes, but for now this limitation makes the system easier to understand and
-    implement.
+    Disabled envelopes are skipped, so in the above example, if `c` and `d` were disabled,
+    envelope `b` would be combined with `e` if `b`'s decay slope overlaps with `e`'s attack slope.
     """
+    # Discard all envelopes that are disabled so combining longer envelopes that aren't
+    # directly adjacent to each other works as expected
+    active_envelopes: list[EnvelopeStatus] = []
+    for settings, status in zip(envelopes_settings, envelopes_status, strict=True):
+        if settings.is_disabled():
+            continue
+        active_envelopes.append(status)
 
-    for left, right in pairwise((*envelopes_status, envelopes_status[0])):
+    # In the rare but possible case that all envelopes are disabled,
+    # we cannot call `combiner` and have to return 0
+    if len(active_envelopes) < 1:
+        return 0.0
+
+    # Find the pair of envelopes we need to combine at the current point in time
+    for left, right in pairwise((*active_envelopes, active_envelopes[0])):
         if left.time > TIME_MIDPOINT >= right.time:
             return combiner(left, right)
 
-    msg = (
-        f"{TIME_MIDPOINT=} is not in between any of the provided "
-        f"time values {[s.time for s in envelopes_status]}"
-    )
-    raise ValueError(msg)
+    # It is possible that no pair was found. This can happen if they are spaced at
+    # an interval that is less than `(TIME_END - TIME_START) / len(envelopes)` or
+    # if a lot of the later envelopes were disabled.
+    # In this case, we always have the last active envelope on the left and the
+    # first on the right.
+    return combiner(active_envelopes[-1], active_envelopes[0])
 
 
 def combine_max(left: EnvelopeStatus, right: EnvelopeStatus) -> float:
