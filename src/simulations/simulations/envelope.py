@@ -70,7 +70,7 @@ def a_d_envelope(settings: EnvelopeSettings, time: float) -> float:
 
     1. From `TIME_START` to `TIME_MIDPOINT - attack`, return 0
     2. From `TIME_MIDPOINT - attack` to `TIME_MIDPOINT`, return the attack envelope based on `shape`
-    3. From `TIME_MIPOINT` to `TIME_MIDPOINT + decay`, return the decay envelope based on `shape`
+    3. From `TIME_MIDPOINT` to `TIME_MIDPOINT + decay`, return the decay envelope based on `shape`
     4. From `TIME_MIDPOINT + decay` to `TIME_END`, return 0
     """
     attack, decay, shape, amplitude = (
@@ -81,7 +81,7 @@ def a_d_envelope(settings: EnvelopeSettings, time: float) -> float:
     )
 
     assert TIME_START <= time <= TIME_END
-    if amplitude < settings.is_disabled():
+    if settings.is_disabled():
         return 0.0
 
     # Attack phase
@@ -189,6 +189,12 @@ def combine_envelopes(
     # we cannot call `combiner` and have to return 0
     if len(active_envelopes) < 1:
         return 0.0
+
+    # If only one envelope is active there is nothing to combine;
+    # calling the combiner with the same envelope on both sides would be
+    # meaningless (and would cause ZeroDivisionError for the linear combiner)
+    if len(active_envelopes) == 1:
+        return active_envelopes[0].value
 
     # Find the pair of envelopes we need to combine at the current point in time
     for left, right in pairwise((*active_envelopes, active_envelopes[0])):
