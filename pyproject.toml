@@ -16,6 +16,7 @@ dependencies = [
     "pytest-randomly>=4.1.0",
     "faker>=40.23.0",
     "pytest-xdist>=3.8.0",
+    "hypothesis[cli]>=6.155.7",
 ]
 
 [project.scripts]
