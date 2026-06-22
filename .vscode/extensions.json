@@ -7,5 +7,6 @@
         "detachhead.basedpyright",
         "yzhang.markdown-all-in-one",
         "charliermarsh.ruff",
+        "ms-python.debugpy",
     ]
 }
