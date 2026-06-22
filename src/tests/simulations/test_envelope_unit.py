@@ -17,6 +17,7 @@ from simulations.envelope import (
     PROGRESS_MIN,
     SHAPE_MAX,
     SHAPE_MIN,
+    SLOPE_TIME_MIN,
     TIME_END,
     TIME_MIDPOINT,
     TIME_START,
@@ -259,15 +260,13 @@ class TestADEnvelopeDisabledAlwaysZero:
 
 
 class TestADEnvelopeZeroAttackDecay:
-    def test_zero_attack_at_midpoint_returns_zero(self):
-        # attack=0 means the attack phase is skipped entirely, so even at
-        # TIME_MIDPOINT the attack branch short-circuits and returns 0.
-        settings = _settings(attack=0.0, decay=_random_attack_decay())
-        assert a_d_envelope(settings, TIME_MIDPOINT) == 0.0
+    def test_near_zero_attack_just_before_midpoint_returns_zero(self):
+        settings = _settings(attack=SLOPE_TIME_MIN, decay=_random_attack_decay())
+        assert a_d_envelope(settings, TIME_MIDPOINT - SLOPE_TIME_MIN) == 0.0
 
-    def test_zero_decay_just_after_midpoint_returns_zero(self):
-        settings = _settings(attack=_random_attack_decay(), decay=0.0)
-        assert a_d_envelope(settings, TIME_MIDPOINT + 0.001) == 0.0
+    def test_near_zero_decay_just_after_midpoint_returns_zero(self):
+        settings = _settings(attack=_random_attack_decay(), decay=SLOPE_TIME_MIN)
+        assert a_d_envelope(settings, TIME_MIDPOINT + SLOPE_TIME_MIN) == 0.0
 
 
 class TestADEnvelopeOutputRange:

@@ -4,21 +4,25 @@ from dataclasses import dataclass
 from itertools import pairwise
 from typing import Protocol
 
+from simulations.helpers import clamp_checked
+
 # Max and min values for inputs.
-# Maximum is slightly larger than one so asserts don't
-# fail because of inaccurate float values
 SHAPE_MIN = 0.0
-SHAPE_MAX = 1.001
+SHAPE_MAX = 1.0
 AMPLITUDE_MIN = 0.0
 AMPLITUDE_LOWER_CUTOFF = 0.01
-AMPLITUDE_MAX = 1.001
+AMPLITUDE_MAX = 1.0
 PROGRESS_MIN = 0.0
-PROGRESS_MAX = 1.001
+PROGRESS_MAX = 1.0
+INTERVAL_MIN = 0.05
+INTERVAL_MAX = 0.5
 
 # Loop timing
-# No need for slightly larger maximum because time is always treated
-# module TIME_END, so this value is never actually reached
+# The minimum time a slope is allowed to last, to avoid subnormal values
+# and the resulting loss of precision
+SLOPE_TIME_MIN = 0.001
 TIME_START = 0.0
+TIME_MIN = TIME_START + SLOPE_TIME_MIN
 TIME_END = 2.0
 TIME_MIDPOINT = (TIME_START + TIME_END) / 2
 
@@ -64,8 +68,8 @@ def a_d_shape(shape: float, progress: float) -> float:
     >>> math.isclose(a_d_shape(1.0, 0.7), 0.7 ** 10)
     True
     """
-    assert PROGRESS_MIN <= progress <= PROGRESS_MAX, f"{progress} is outside of limits!"
-    assert SHAPE_MIN <= shape <= SHAPE_MAX, f"{shape} is outside of limits!"
+    progress = clamp_checked(progress, PROGRESS_MIN, PROGRESS_MAX)
+    shape = clamp_checked(shape, SHAPE_MIN, SHAPE_MAX)
 
     exponent = 10.0  # Exponent for "quadratic" envelope, eyeballed in Desmos
     s, x = shape, progress
@@ -78,7 +82,7 @@ def a_d_shape(shape: float, progress: float) -> float:
     return interpolated
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class EnvelopeSettings:
     attack: float
     decay: float
@@ -86,10 +90,20 @@ class EnvelopeSettings:
     amplitude: float
 
     def __post_init__(self):
-        assert TIME_START <= self.attack <= TIME_MIDPOINT
-        assert TIME_START <= self.decay <= TIME_MIDPOINT
-        assert SHAPE_MIN <= self.shape <= SHAPE_MAX
-        assert AMPLITUDE_MIN <= self.amplitude <= AMPLITUDE_MAX
+        object.__setattr__(
+            self, "attack", clamp_checked(self.attack, TIME_MIN, TIME_MIDPOINT)
+        )
+        object.__setattr__(
+            self, "decay", clamp_checked(self.decay, TIME_MIN, TIME_MIDPOINT)
+        )
+        object.__setattr__(
+            self, "shape", clamp_checked(self.shape, SHAPE_MIN, SHAPE_MAX)
+        )
+        object.__setattr__(
+            self,
+            "amplitude",
+            clamp_checked(self.amplitude, AMPLITUDE_MIN, AMPLITUDE_MAX),
+        )
 
     def is_disabled(self):
         return self.amplitude <= AMPLITUDE_LOWER_CUTOFF
@@ -142,7 +156,7 @@ def a_d_envelope(settings: EnvelopeSettings, time: float) -> float:
     # Attack phase
     if time <= TIME_MIDPOINT:
         start = TIME_MIDPOINT - attack
-        if time < start or attack == 0.0:
+        if time < start:
             return 0.0
 
         progress = (time - start) / attack
@@ -150,7 +164,7 @@ def a_d_envelope(settings: EnvelopeSettings, time: float) -> float:
     # Decay phase
     else:
         end = TIME_MIDPOINT + decay
-        if time > end or decay == 0.0:
+        if time > end:
             return 0.0
 
         progress = (-time + end) / decay
@@ -171,8 +185,10 @@ class EnvelopeStatus:
     value: float
 
     def __post_init__(self):
-        assert TIME_START <= self.time <= TIME_END
-        assert AMPLITUDE_MIN <= self.value <= AMPLITUDE_MAX
+        object.__setattr__(self, "time", clamp_checked(self.time, TIME_START, TIME_END))
+        object.__setattr__(
+            self, "value", clamp_checked(self.value, AMPLITUDE_MIN, AMPLITUDE_MAX)
+        )
 
 
 def offset_envelopes(
@@ -180,6 +196,8 @@ def offset_envelopes(
 ) -> list[EnvelopeStatus]:
     """Calculate values at `time` for envelopes in `envelopes_settings`,
     spaced evenly apart with peaks occurring every `interval`."""
+    interval = clamp_checked(interval, INTERVAL_MIN, INTERVAL_MAX)
+
     envelopes_status: list[EnvelopeStatus] = []
     for i, env_settings in enumerate(envelopes_settings):
         env_time = (time - interval * i) % TIME_END
@@ -252,7 +270,7 @@ def combine_envelopes(
 
     # Find the pair of envelopes we need to combine at the current point in time
     for left, right in pairwise((*active_envelopes, active_envelopes[0])):
-        if left.time > TIME_MIDPOINT >= right.time:
+        if left.time >= TIME_MIDPOINT >= right.time:
             return combiner(left, right)
 
     # It is possible that no pair was found. This can happen if they are spaced at
