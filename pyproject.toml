@@ -12,6 +12,10 @@ dependencies = [
     "ruff>=0.15.18",
     "basedpyright>=1.39.8",
     "ipympl>=0.10.0",
+    "pytest>=9.1.1",
+    "pytest-randomly>=4.1.0",
+    "faker>=40.23.0",
+    "pytest-xdist>=3.8.0",
 ]
 
 [project.scripts]
@@ -35,6 +39,11 @@ include = ["src/scripts"]
 
 [tool.hatch.build.targets.wheel]
 include = ["src/scripts"]
+
+[tool.pytest.ini_options]
+addopts = "--doctest-modules"
+consider_namespace_packages = true
+testpaths = ["src/simulations", "src/tests"]
 
 [tool.pyright]
 executionEnvironments = [
