@@ -45,6 +45,14 @@ direnv exec . <command>
 direnv exec . uv run pytest -v
 ```
 
+## Running all checks and formatting
+
+This should be done after finishing a task to ensure all tests, type-checks and linting-rules pass and that all formatting-rules are applied.
+
+```bash
+direnv exec . uv run check
+```
+
 ## Running the test suite
 
 ```bash
