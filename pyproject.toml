@@ -45,6 +45,63 @@ addopts = "--doctest-modules"
 consider_namespace_packages = true
 testpaths = ["src/simulations", "src/tests"]
 
+[tool.ruff.lint]
+select = [
+    "F",    # Rules from pyflakes
+    "E",    # Errors from pycodestyle
+    "W",    # Warnings from pycodestyle
+    "I",    # Sort imports
+    "N",    # PEP8 Naming Conventions
+    "UP",   # Consistently use modern Python features
+    "BLE",  # Disallow blind except
+    "FBT",  # Disallow boolean trap
+    "B",    # Detect common bugs
+    "A",    # Prevent builtin shadowing
+    "C4",   # Comprehensions style
+    "DTZ",  # Ensure only timezone-aware datetimes are used
+    "EM",   # Error message conventions
+    "EXE",  # Proper use of shebangs
+    "ISC",  # Consistent use of implicit string concatenation
+    "ICN",  # Import conventions
+    "INP",  # Force use of __init__.py over namespace packages
+    "PIE",  # Miscellaneous style issues
+    "T20",  # No print(), use logger.*() instead
+    "PYI",  # Typing conventions
+    "PT",   # Test quality
+    "Q",    # Consistent use of quotes
+    "RSE",  # Raise exceptions consistently
+    "RET",  # Return value issues
+    "SLF",  # Don't access private members
+    "SIM",  # Simplify logic
+    "TID",  # Tidy imports
+    "PTH",  # Prefer pathlib over legacy alternatives
+    "ERA",  # Disallow commented-out code
+    "PERF", # Common pitfalls regarding performance
+    "FURB", # Reasonable refactors for consistency
+    "RUF",  # Ruff-specific rules
+    "PLE",  # Errors from PyLint
+    "PLW",  # Warnings from PyLint
+    "PLC",  # Coding conventions from PyLint
+    "PLR",  # Suggested refactors from PyLint
+]
+ignore = [
+    # I often find it useful to assign to a variable before returning
+    "RET504",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"*.ipynb" = [
+    # Maximum line length is not as important in notebooks and sometimes even annoying
+    "E501",
+]
+"**/test_*.py" = [
+    # Tests are part of namespace packages. pytest discovers tests as files, not modules.
+    # __init__.py files can interfere with this mechanism
+    "INP001",
+    # Magic numbers are often more readable in tests, and the test code is not part of the public API
+    "PLR2004",
+]
+
 [tool.pyright]
 ignore = [".venv"]
 executionEnvironments = [

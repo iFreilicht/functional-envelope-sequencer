@@ -10,7 +10,6 @@ envelopes).
 
 import pytest
 from faker import Faker
-
 from simulations.envelope import (
     AMPLITUDE_LOWER_CUTOFF,
     AMPLITUDE_MAX,

@@ -1,7 +1,7 @@
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import pairwise
-import math
 from typing import Protocol
 
 # Max and min values for inputs.
@@ -67,11 +67,11 @@ def a_d_shape(shape: float, progress: float) -> float:
     assert PROGRESS_MIN <= progress <= PROGRESS_MAX, f"{progress} is outside of limits!"
     assert SHAPE_MIN <= shape <= SHAPE_MAX, f"{shape} is outside of limits!"
 
-    EXPONENT = 10.0  # Exponent for "quadratic" envelope, eyeballed in Desmos
+    exponent = 10.0  # Exponent for "quadratic" envelope, eyeballed in Desmos
     s, x = shape, progress
     lin = x  # Linear envelope, should be the only one when shape is 0
     quad = math.pow(
-        x, math.pow(EXPONENT, s)
+        x, math.pow(exponent, s)
     )  # "Quadratic" envelope, should be the only one when shape is 1
     # Interpolation is not quite linear, but looks very natural when sweeping over s
     interpolated = (1 - s) * math.pow(lin, (1 + s)) + s * quad
@@ -96,15 +96,17 @@ class EnvelopeSettings:
 
 
 def a_d_envelope(settings: EnvelopeSettings, time: float) -> float:
-    """Function describing a single Attack/Decay (A/D) envelope that is fixed in an interval between
-    `time=TIME_START` and `time=TIME_END`, with the peak always occurring at `time=TIME_MIDPOINT`.
+    """Single Attack/Decay (A/D) envelope fixed in the interval
+    `[TIME_START, TIME_END]`, with the peak always at `TIME_MIDPOINT`.
 
-    `attack` is the time it takes for the attack-slope to reach the peak when starting at level 0.
-    `decay` is the time it takes for the delay-slope to reach level 0 when starting from the peak.
+    `attack` is the time for the attack slope to rise from 0 to the peak.
+    `decay` is the time for the decay slope to fall from the peak to 0.
 
     1. From `TIME_START` to `TIME_MIDPOINT - attack`, return 0
-    2. From `TIME_MIDPOINT - attack` to `TIME_MIDPOINT`, return the attack envelope based on `shape`
-    3. From `TIME_MIDPOINT` to `TIME_MIDPOINT + decay`, return the decay envelope based on `shape`
+    2. From `TIME_MIDPOINT - attack` to `TIME_MIDPOINT`, return the
+       attack envelope shaped by `shape`
+    3. From `TIME_MIDPOINT` to `TIME_MIDPOINT + decay`, return the
+       decay envelope shaped by `shape`
     4. From `TIME_MIDPOINT + decay` to `TIME_END`, return 0
 
     The peak at TIME_MIDPOINT always equals `amplitude`:
@@ -160,10 +162,10 @@ def a_d_envelope(settings: EnvelopeSettings, time: float) -> float:
 @dataclass(frozen=True)
 class EnvelopeStatus:
     time: float
-    """The current time input that was used to generate `value`, or, in other words,
-    how much time has passed since this envelope started.
-    
-    Is expected to wrap back to `TIME_START` once `TIME_END` is reached.
+    """The current time input that was used to generate `value`, i.e. how
+    much time has passed since this envelope started.
+
+    Expected to wrap back to `TIME_START` once `TIME_END` is reached.
     """
 
     value: float
@@ -176,8 +178,8 @@ class EnvelopeStatus:
 def offset_envelopes(
     envelopes_settings: Sequence[EnvelopeSettings], interval: float, time: float
 ) -> list[EnvelopeStatus]:
-    """Function calculating values at `time` for envelopes defined by `envelopes_settings`
-    spaced apart evenly with peaks occurring every `interval`."""
+    """Calculate values at `time` for envelopes in `envelopes_settings`,
+    spaced evenly apart with peaks occurring every `interval`."""
     envelopes_status: list[EnvelopeStatus] = []
     for i, env_settings in enumerate(envelopes_settings):
         env_time = (time - interval * i) % TIME_END
@@ -202,7 +204,7 @@ def combine_envelopes(
     on them to get a combined value.
 
     Consider the example below, where `envelopes_status` has eight elements,
-    represented by the letters a-h. `y` is the value of the `EnvelopeStatus.time` attribute,
+    represented by the letters a-h. `y` is the `EnvelopeStatus.time` value,
     `x` is the global timeline, `t` is the current global time.
 
     ```
@@ -218,17 +220,16 @@ def combine_envelopes(
                         t
     ```
 
-    The `⊙` is the point that we are trying to inspect, where `x=time` and
-    `status.time=TIME_MIDPOINT`. Specifically, we're trying to find the two envelopes to
-    the left and to the right of `⊙` because those are the two whose peaks the current
-    `time` lies between, meaning they are the ones we need to combine.
+    The `⊙` is the point under inspection, where `x=time` and
+    `status.time=TIME_MIDPOINT`. We look for the two envelopes to the left
+    and right of `⊙` — those are the ones whose peaks the current `time`
+    lies between, so they are the pair we need to combine.
 
-    The above illustration is somewhat inaccurate; the slope of the envelopes' time-value
-    might be much shallower and they might be closer together, so it is very possible that multiple
-    slopes overlap at once.
+    The illustration is somewhat inaccurate; the slopes may be much shallower
+    and closer together, so multiple slopes can overlap at once.
 
-    Disabled envelopes are skipped, so in the above example, if `c` and `d` were disabled,
-    envelope `b` would be combined with `e` if `b`'s decay slope overlaps with `e`'s attack slope.
+    Disabled envelopes are skipped, so if `c` and `d` were disabled, envelope
+    `b` would be combined with `e` when their slopes overlap.
     """
     # Discard all envelopes that are disabled so combining longer envelopes that aren't
     # directly adjacent to each other works as expected
