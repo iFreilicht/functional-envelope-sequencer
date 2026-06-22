@@ -51,4 +51,7 @@ executionEnvironments = [
     { root = "src/notebooks", extraPaths = [
         "src/simulations",
     ], reportUnusedCallResult = false, reportUnknownMemberType = false, reportUnknownArgumentType = false, reportAny = false },
+    { root = "src/tests", extraPaths = [
+        "src/simulations",
+    ] },
 ]

@@ -29,6 +29,40 @@ def a_d_shape(shape: float, progress: float) -> float:
     If `shape` is $s$ and `progress` is $x$:
 
     $$f\left(x\right)=\left(1-s\right)x^{\left(1+s\right)}+sx^{10^{s}}$$
+
+    At progress 0 and 1 the output is independent of shape:
+
+    >>> a_d_shape(0.0, 0.0)
+    0.0
+    >>> a_d_shape(0.5, 0.0)
+    0.0
+    >>> a_d_shape(1.0, 0.0)
+    0.0
+    >>> a_d_shape(0.0, 1.0)
+    1.0
+    >>> a_d_shape(0.5, 1.0)
+    1.0
+    >>> a_d_shape(1.0, 1.0)
+    1.0
+
+    With shape 0 the function is linear (returns `progress` unchanged):
+
+    >>> a_d_shape(0.0, 0.2)
+    0.2
+    >>> a_d_shape(0.0, 0.5)
+    0.5
+    >>> a_d_shape(0.0, 0.7)
+    0.7
+
+    With shape 1 the function is a degree-10 polynomial:
+
+    >>> import math
+    >>> math.isclose(a_d_shape(1.0, 0.2), 0.2 ** 10)
+    True
+    >>> math.isclose(a_d_shape(1.0, 0.5), 0.5 ** 10)
+    True
+    >>> math.isclose(a_d_shape(1.0, 0.7), 0.7 ** 10)
+    True
     """
     assert PROGRESS_MIN <= progress <= PROGRESS_MAX, f"{progress} is outside of limits!"
     assert SHAPE_MIN <= shape <= SHAPE_MAX, f"{shape} is outside of limits!"
@@ -72,6 +106,25 @@ def a_d_envelope(settings: EnvelopeSettings, time: float) -> float:
     2. From `TIME_MIDPOINT - attack` to `TIME_MIDPOINT`, return the attack envelope based on `shape`
     3. From `TIME_MIDPOINT` to `TIME_MIDPOINT + decay`, return the decay envelope based on `shape`
     4. From `TIME_MIDPOINT + decay` to `TIME_END`, return 0
+
+    The peak at TIME_MIDPOINT always equals `amplitude`:
+
+    >>> s = EnvelopeSettings(attack=0.5, decay=0.5, shape=0.0, amplitude=1.0)
+    >>> a_d_envelope(s, TIME_MIDPOINT)
+    1.0
+
+    Regions outside the attack/decay window return 0:
+
+    >>> a_d_envelope(s, TIME_START)
+    0.0
+    >>> a_d_envelope(s, TIME_END)
+    0.0
+
+    A disabled envelope (amplitude ≤ AMPLITUDE_LOWER_CUTOFF) always returns 0:
+
+    >>> disabled = EnvelopeSettings(attack=0.5, decay=0.5, shape=0.0, amplitude=0.0)
+    >>> a_d_envelope(disabled, TIME_MIDPOINT)
+    0.0
     """
     attack, decay, shape, amplitude = (
         settings.attack,
