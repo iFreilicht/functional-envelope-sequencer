@@ -46,6 +46,7 @@ consider_namespace_packages = true
 testpaths = ["src/simulations", "src/tests"]
 
 [tool.pyright]
+ignore = [".venv"]
 executionEnvironments = [
     { root = "src/simulations" },
     { root = "src/notebooks", extraPaths = [
