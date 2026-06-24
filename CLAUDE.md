@@ -85,6 +85,80 @@ To run in parallel (faster on large suites):
 direnv exec . uv run pytest -n auto
 ```
 
+## Debugging envelope math with `plot-envelopes`
+
+The `plot-envelopes` CLI script exists specifically to aid debugging. It lets you reproduce any envelope configuration from a failing test as a stream of numbers, which you can inspect directly or pipe through standard tools.
+
+### Basic usage
+
+```bash
+# Print tab-separated (time, combined-value) pairs to stdout
+direnv exec . uv run plot-envelopes \
+  --start 0 --end 2 --rate 200 \
+  --envelope "attack=0.3,decay=0.5,shape=0.8,amplitude=1.0" \
+  --envelope "attack=0.4,decay=0.4,shape=0.2,amplitude=0.8" \
+  --interval 0.25 \
+  --combiner linear \
+  --format values
+```
+
+Each line is `<time>\t<combined-value>`. Log messages (INFO/WARNING) go to stderr and do not appear in the values output.
+
+### Translating a failing test into a `plot-envelopes` invocation
+
+When a Hypothesis test fails it prints the minimal shrunk counterexample, e.g.:
+
+```
+E   settings_list=[EnvelopeSettings(
+E         attack=0.3,
+E         decay=0.5,
+E         shape=0.8,
+E         amplitude=1.0
+E     ),
+E     EnvelopeSettings(attack=0.4, decay=0.4, shape=0.2, amplitude=0.8)],
+E   interval = 0.25,
+E   time = 0.75,
+```
+
+Translate each `EnvelopeSettings(...)` into one `--envelope` flag and pass the `interval` directly. For `time`, set `--start` and `--end` to a small window around it (e.g. `--start 0.25 --end 1.25`) so you can see the shape context:
+
+```bash
+direnv exec . uv run plot-envelopes \
+  --start 0.25 --end 0.75 --rate 200 \
+  --envelope "attack=0.3,decay=0.5,shape=0.8,amplitude=1.0" \
+  --envelope "attack=0.4,decay=0.4,shape=0.2,amplitude=0.8" \
+  --interval 0.25 \
+  --combiner linear \
+  --format values
+```
+
+### Useful one-liners for diagnosing a specific time point
+
+```bash
+# Show the value at exactly t=0.75
+direnv exec . uv run plot-envelopes \
+  --start 0.75 --end 0.75 --rate 1 \
+  --envelope "attack=0.3,decay=0.5,shape=0.8,amplitude=1.0" \
+  --envelope "attack=0.4,decay=0.4,shape=0.2,amplitude=0.8" \
+  --interval 0.25 --combiner linear --format values
+
+# Find all time points where the combined value exceeds 1.0 (the invariant violation)
+direnv exec . uv run plot-envelopes \
+  --start 0 --end 2 --rate 1000 \
+  --envelope "attack=0.3,decay=0.5,shape=0.8,amplitude=1.0" \
+  --envelope "attack=0.4,decay=0.4,shape=0.2,amplitude=0.8" \
+  --interval 0.25 --combiner linear --format values \
+  | awk '$2 > 1.0 { print }'
+
+# Find the time point with the maximum combined value
+direnv exec . uv run plot-envelopes \
+  --start 0 --end 2 --rate 1000 \
+  --envelope "attack=0.3,decay=0.5,shape=0.8,amplitude=1.0" \
+  --envelope "attack=0.4,decay=0.4,shape=0.2,amplitude=0.8" \
+  --interval 0.25 --combiner linear --format values \
+  | sort -k2 -n | tail -1
+```
+
 ## Project layout
 
 | Path | Purpose |
