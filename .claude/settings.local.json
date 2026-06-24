@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(direnv exec . uv run plot-envelopes *)",
+      "Bash(direnv exec . uv run pytest *)",
+      "Bash(direnv exec . uv run check *)",
+      "Bash(direnv exec . uv run ruff *)",
+      "Bash(direnv exec . uv run basedpyright *)",
+      "Bash(echo \"exit: $?\")"
+    ]
+  }
+}
