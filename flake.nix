@@ -57,6 +57,8 @@
             pkg-config
             # Additional requirements for scripts and experiments
             uv
+            # C++ test framework for src/tests/cpp/
+            catch2_3
           ];
           shellHook = ''
             uv sync

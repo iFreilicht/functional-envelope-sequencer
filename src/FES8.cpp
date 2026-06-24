@@ -1,19 +1,28 @@
 #include "plugin.hpp"
+#include "fes_dsp.hpp"
+
+#include <cmath>  // std::pow, std::fmod
 
 
 struct FES8 : Module {
+	static constexpr int NUM_ENVELOPES = 8;
+
 	enum ParamId {
+		// Global controls
 		START_PARAM,
+		STOP_PARAM,
+		TEMPO_PARAM,
+		INTERVAL_PARAM,
+		COMBINER_PARAM,
+		// Per-envelope controls — grouped consecutively so loop arithmetic works
 		ATTACK1_PARAM,
 		ATTACK2_PARAM,
 		ATTACK3_PARAM,
 		ATTACK4_PARAM,
 		ATTACK5_PARAM,
-		STOP_PARAM,
 		ATTACK6_PARAM,
 		ATTACK7_PARAM,
 		ATTACK8_PARAM,
-		TEMPO_PARAM,
 		DECAY1_PARAM,
 		DECAY2_PARAM,
 		DECAY3_PARAM,
@@ -30,7 +39,6 @@ struct FES8 : Module {
 		SHAPE6_PARAM,
 		SHAPE7_PARAM,
 		SHAPE8_PARAM,
-		INTERVAL_PARAM,
 		AMPLITUDE1_PARAM,
 		AMPLITUDE2_PARAM,
 		AMPLITUDE3_PARAM,
@@ -39,7 +47,6 @@ struct FES8 : Module {
 		AMPLITUDE6_PARAM,
 		AMPLITUDE7_PARAM,
 		AMPLITUDE8_PARAM,
-		COMBINER_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -70,58 +77,112 @@ struct FES8 : Module {
 		LIGHTS_LEN
 	};
 
+	// Runtime state
+	float phase = 0.f;    // current position in [0, TIME_END)
+	bool running = true; // TODO: make this false again!
+	dsp::SchmittTrigger startTrigger;
+	dsp::SchmittTrigger stopTrigger;
+	dsp::PulseGenerator timeoutPulse;
+
 	FES8() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-		configParam(START_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(ATTACK1_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(ATTACK2_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(ATTACK3_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(ATTACK4_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(ATTACK5_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(STOP_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(ATTACK6_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(ATTACK7_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(ATTACK8_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(TEMPO_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(DECAY1_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(DECAY2_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(DECAY3_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(DECAY4_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(DECAY5_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(DECAY6_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(DECAY7_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(DECAY8_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(SHAPE1_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(SHAPE2_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(SHAPE3_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(SHAPE4_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(SHAPE5_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(SHAPE6_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(SHAPE7_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(SHAPE8_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(INTERVAL_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(AMPLITUDE1_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(AMPLITUDE2_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(AMPLITUDE3_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(AMPLITUDE4_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(AMPLITUDE5_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(AMPLITUDE6_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(AMPLITUDE7_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(AMPLITUDE8_PARAM, 0.f, 1.f, 0.f, "");
-		configParam(COMBINER_PARAM, 0.f, 1.f, 0.f, "");
-		configOutput(TIMEOUT_OUTPUT, "");
-		configOutput(OUT1_OUTPUT, "");
-		configOutput(OUT2_OUTPUT, "");
-		configOutput(OUT3_OUTPUT, "");
-		configOutput(OUT4_OUTPUT, "");
-		configOutput(OUT5_OUTPUT, "");
-		configOutput(OUT6_OUTPUT, "");
-		configOutput(OUT7_OUTPUT, "");
-		configOutput(OUT8_OUTPUT, "");
-		configOutput(COMBINEDOUT_OUTPUT, "");
+
+		// Global controls
+		configButton(START_PARAM,   "Start");
+		configButton(STOP_PARAM,    "Stop");
+		configParam(TEMPO_PARAM,    0.f, 1.f, 0.5f, "Tempo",   " Hz", 8.f, 0.5f);
+		configParam(INTERVAL_PARAM, 0.f, 1.f, 0.5f, "Interval (peak spacing)");
+		configSwitch(COMBINER_PARAM, 0.f, 1.f, 0.f, "Combiner", {"Max", "Linear"});
+
+		// Per-envelope controls
+		const char* chNames[NUM_ENVELOPES] = {"1", "2", "3", "4", "5", "6", "7", "8"};
+		for (int i = 0; i < NUM_ENVELOPES; ++i) {
+			configParam(ATTACK1_PARAM    + i, 0.f, 1.f, 0.5f,
+				rack::string::f("Channel %s attack",    chNames[i]));
+			configParam(DECAY1_PARAM     + i, 0.f, 1.f, 0.5f,
+				rack::string::f("Channel %s decay",     chNames[i]));
+			configParam(SHAPE1_PARAM     + i, 0.f, 1.f, 0.0f,
+				rack::string::f("Channel %s shape",     chNames[i]));
+			configParam(AMPLITUDE1_PARAM + i, 0.f, 1.f, 1.0f,
+				rack::string::f("Channel %s amplitude", chNames[i]));
+		}
+
+		// Outputs
+		configOutput(TIMEOUT_OUTPUT,    "Timeout (loop-wrap trigger)");
+		for (int i = 0; i < NUM_ENVELOPES; ++i) {
+			configOutput(OUT1_OUTPUT + i,
+				rack::string::f("Envelope %s", chNames[i]));
+		}
+		configOutput(COMBINEDOUT_OUTPUT, "Combined envelope");
 	}
 
 	void process(const ProcessArgs& args) override {
+		// --- START / STOP buttons ---
+		if (startTrigger.process(params[START_PARAM].getValue())) {
+			running = true;
+			phase   = 0.f;
+		}
+		if (stopTrigger.process(params[STOP_PARAM].getValue())) {
+			running = false;
+		}
+
+		// --- Advance phase ---
+		if (running) {
+			// Exponential tempo mapping: knob 0→0.5 Hz, 0.5→2 Hz, 1→4 Hz
+			// rate = 0.5 * 8^knob  →  [0.5, 4.0] Hz
+			const float tempoKnob = params[TEMPO_PARAM].getValue();
+			const float rate      = 0.5f * std::pow(8.f, tempoKnob);
+
+			phase += rate * args.sampleTime;
+			if (phase >= fes::TIME_END) {
+				phase = std::fmod(phase, fes::TIME_END);
+				timeoutPulse.trigger(1e-3f);  // 1 ms trigger on loop wrap
+			}
+		}
+
+		// --- Build per-envelope settings ---
+		fes::EnvelopeSettings settings[NUM_ENVELOPES];
+		for (int i = 0; i < NUM_ENVELOPES; ++i) {
+			// Exponential attack/decay mapping: knob 0 → SLOPE_TIME_MIN, 1 → TIME_MIDPOINT
+			const float attackKnob = params[ATTACK1_PARAM + i].getValue();
+			const float decayKnob  = params[DECAY1_PARAM  + i].getValue();
+
+			settings[i] = {
+				fes::SLOPE_TIME_MIN * std::pow(fes::TIME_MIDPOINT / fes::SLOPE_TIME_MIN, attackKnob),
+				fes::SLOPE_TIME_MIN * std::pow(fes::TIME_MIDPOINT / fes::SLOPE_TIME_MIN, decayKnob),
+				params[SHAPE1_PARAM     + i].getValue(),
+				params[AMPLITUDE1_PARAM + i].getValue()
+			};
+		}
+
+		// --- Interval ---
+		const float intervalKnob = params[INTERVAL_PARAM].getValue();
+		const float interval = fes::INTERVAL_MIN
+			+ intervalKnob * (fes::INTERVAL_MAX - fes::INTERVAL_MIN);
+
+		// --- Compute envelope status for all channels ---
+		fes::EnvelopeStatus statuses[NUM_ENVELOPES];
+		fes::offsetEnvelopes(settings, NUM_ENVELOPES, interval, phase, statuses);
+
+		// --- Individual envelope outputs and peak lights ---
+		for (int i = 0; i < NUM_ENVELOPES; ++i) {
+			// Scale 0–1 → 0–10 V (VCV Rack unipolar CV convention)
+			outputs[OUT1_OUTPUT + i].setVoltage(statuses[i].value * 10.f);
+
+			// Peak light: smooth fade, lights up near the envelope peak
+			const float brightness = (statuses[i].value >= 0.99f) ? 1.f : 0.f;
+			lights[PEAK1_LIGHT + i].setBrightnessSmooth(brightness, args.sampleTime);
+		}
+
+		// --- Combined output ---
+		const bool useLinear = params[COMBINER_PARAM].getValue() >= 0.5f;
+		const float combined = fes::combineEnvelopes(
+			statuses, NUM_ENVELOPES, phase, useLinear);
+		outputs[COMBINEDOUT_OUTPUT].setVoltage(combined * 10.f);
+
+		// --- Timeout output ---
+		outputs[TIMEOUT_OUTPUT].setVoltage(
+			timeoutPulse.process(args.sampleTime) ? 10.f : 0.f);
 	}
 };
 

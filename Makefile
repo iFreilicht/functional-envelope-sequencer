@@ -21,3 +21,18 @@ DISTRIBUTABLES += $(wildcard presets)
 
 # Include the Rack plugin Makefile framework
 include $(RACK_DIR)/plugin.mk
+
+# ---------------------------------------------------------------------------
+# C++ unit tests (fes_dsp.hpp, independent of the Rack SDK)
+# Run with:  make cpp-test
+# ---------------------------------------------------------------------------
+CPP_TEST_SRC = src/tests/cpp/test_fes_dsp.cpp
+CPP_TEST_BIN = src/tests/cpp/test_fes_dsp
+
+$(CPP_TEST_BIN): $(CPP_TEST_SRC) src/fes_dsp.hpp
+	$(CXX) -std=c++17 -Wall -Wextra -I src -o $@ $< -lCatch2Main -lCatch2
+
+cpp-test: $(CPP_TEST_BIN)
+	$(CPP_TEST_BIN)
+
+.PHONY: cpp-test

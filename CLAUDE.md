@@ -58,6 +58,12 @@ direnv exec . <command>
 direnv exec . uv run pytest -v
 ```
 
+The development header files for VCV Rack can be found in the path in `$RACK_DIR`, obtained like so:
+
+```
+direnv exec . env | grep RACK_DIR 
+```
+
 ## Running all checks and formatting
 
 This should be done after finishing a task to ensure all tests, type-checks and linting-rules pass and that all formatting-rules are applied.
