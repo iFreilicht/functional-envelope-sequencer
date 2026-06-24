@@ -28,7 +28,7 @@ def compute_values(
     """
     offset_values = [offset_envelopes(envelopes, interval, t) for t in times]
     values_combined = [
-        combine_envelopes(envelopes, s, t, combine_fn)
+        combine_envelopes(s, t, combine_fn)
         for s, t in zip(offset_values, times, strict=True)
     ]
     samples_per_envelope: list[list[EnvelopeStatus]] = [[] for _ in envelopes]

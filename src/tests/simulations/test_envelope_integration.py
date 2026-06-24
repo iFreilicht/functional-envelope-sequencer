@@ -58,7 +58,7 @@ class TestFullPipelineOutputRange:
 
         for time in _TIME_STEPS:
             statuses = offset_envelopes(settings_list, interval, time)
-            result = combine_envelopes(settings_list, statuses, time, combiner)
+            result = combine_envelopes(statuses, time, combiner)
             assert 0.0 <= result <= AMPLITUDE_MAX + 1e-9, (
                 f"Out-of-range result {result} at time={time}"
             )
@@ -71,5 +71,5 @@ class TestFullPipelineOutputRange:
 
         for time in _TIME_STEPS:
             statuses = offset_envelopes(settings_list, interval, time)
-            result = combine_envelopes(settings_list, statuses, time, combiner)
+            result = combine_envelopes(statuses, time, combiner)
             assert result == 0.0, f"Expected 0 at time={time}, got {result}"

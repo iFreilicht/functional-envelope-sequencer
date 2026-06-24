@@ -107,8 +107,8 @@ class EnvelopeSettings:
             clamp_checked(self.amplitude, AMPLITUDE_MIN, AMPLITUDE_MAX),
         )
 
-    def is_disabled(self):
-        return self.amplitude <= AMPLITUDE_LOWER_CUTOFF
+    def is_enabled(self):
+        return self.amplitude > AMPLITUDE_LOWER_CUTOFF
 
 
 def a_d_envelope(settings: EnvelopeSettings, time: float) -> float:
@@ -153,7 +153,7 @@ def a_d_envelope(settings: EnvelopeSettings, time: float) -> float:
         settings.amplitude,
     )
 
-    if settings.is_disabled():
+    if not settings.is_enabled():
         return 0.0
 
     # Attack phase
@@ -190,6 +190,15 @@ class EnvelopeStatus:
     which two envelopes to combine at any given point in time."""
 
     value: float
+    """The value of this envelope at `time`."""
+
+    enabled: float
+    """Whether this envelope is enabled. If `False`, this envelope will not be
+    considered for interpolation, no matter what the other values are.
+
+    This is not equivalent to when `value=0.0` as that can also happen for
+    enabled envelopes.
+    """
 
     def __post_init__(self):
         object.__setattr__(self, "time", clamp_checked(self.time, TIME_START, TIME_END))
@@ -215,7 +224,12 @@ def offset_envelopes(
         env_midpoint = (env_offset + TIME_MIDPOINT) % TIME_END
         value = a_d_envelope(env_settings, env_time)
         envelopes_status.append(
-            EnvelopeStatus(time=env_time, midpoint=env_midpoint, value=value)
+            EnvelopeStatus(
+                time=env_time,
+                midpoint=env_midpoint,
+                value=value,
+                enabled=env_settings.is_enabled(),
+            )
         )
 
     return envelopes_status
@@ -227,7 +241,6 @@ class CombineFn(Protocol):
 
 
 def combine_envelopes(
-    envelopes_settings: Sequence[EnvelopeSettings],
     envelopes_status: Sequence[EnvelopeStatus],
     time: float,
     combiner: CombineFn,
@@ -277,11 +290,7 @@ def combine_envelopes(
 
     # Discard all envelopes that are disabled so combining longer envelopes that aren't
     # directly adjacent to each other works as expected
-    active_envelopes: list[EnvelopeStatus] = []
-    for settings, status in zip(envelopes_settings, envelopes_status, strict=True):
-        if settings.is_disabled():
-            continue
-        active_envelopes.append(status)
+    active_envelopes: list[EnvelopeStatus] = [s for s in envelopes_status if s.enabled]
 
     # In the rare but possible case that all envelopes are disabled,
     # we cannot call `combiner` and have to return 0
