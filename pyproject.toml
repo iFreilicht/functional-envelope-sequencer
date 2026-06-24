@@ -17,10 +17,13 @@ dependencies = [
     "faker>=40.23.0",
     "pytest-xdist>=3.8.0",
     "hypothesis[cli]>=6.155.7",
+    "click>=8.4.1",
+    "loguru>=0.7.0",
 ]
 
 [project.scripts]
 check = "scripts.check:main"
+plot-envelopes = "scripts.plot_envelopes:main"
 
 [tool.hatch.build.targets.wheel.sources]
 "src/scripts" = "scripts"
@@ -105,12 +108,17 @@ ignore = [
 
 [tool.pyright]
 ignore = [".venv"]
+reportImplicitStringConcatenation = false
 executionEnvironments = [
     { root = "src/simulations" },
     { root = "src/notebooks", extraPaths = [
         "src/simulations",
     ], reportUnusedCallResult = false, reportUnknownMemberType = false, reportUnknownArgumentType = false, reportAny = false },
     { root = "src/tests", extraPaths = [
+        "src/simulations",
+        "src/scripts",
+    ], reportPrivateUsage = false, reportMissingTypeStubs = false },
+    { root = "src/scripts", extraPaths = [
         "src/simulations",
     ] },
 ]

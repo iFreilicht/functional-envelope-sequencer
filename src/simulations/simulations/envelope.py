@@ -304,17 +304,3 @@ def combine_envelopes(
     # If no pair was found, we're either to the left of the first or to the right of
     # the last envelope. Because we're wrapping around, these cases are equivalent
     return combiner(active_envelopes[-1], active_envelopes[0])
-
-
-def combine_max(left: EnvelopeStatus, right: EnvelopeStatus) -> float:
-    """Combine two adjacent envelopes by choosing the higher value."""
-    return max(left.value, right.value)
-
-
-def combine_interpolate_linear(left: EnvelopeStatus, right: EnvelopeStatus) -> float:
-    """Combine two adjacent envelopes by interpolating between them linearly."""
-    scale = 1 / (right.time - left.time)
-    raw_weight = TIME_MIDPOINT - left.time
-    weight = raw_weight * scale
-    interpolated = (1 - weight) * left.value + weight * right.value
-    return interpolated

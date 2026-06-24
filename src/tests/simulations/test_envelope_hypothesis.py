@@ -13,6 +13,7 @@ reporting, making failures much easier to diagnose.
 import pytest
 from hypothesis import assume, given
 from hypothesis import strategies as st
+from simulations.combiners import CombineFn, combine_interpolate_linear, combine_max
 from simulations.envelope import (
     AMPLITUDE_LOWER_CUTOFF,
     AMPLITUDE_MAX,
@@ -27,13 +28,10 @@ from simulations.envelope import (
     TIME_END,
     TIME_MIDPOINT,
     TIME_START,
-    CombineFn,
     EnvelopeSettings,
     a_d_envelope,
     a_d_shape,
     combine_envelopes,
-    combine_interpolate_linear,
-    combine_max,
     offset_envelopes,
 )
 
@@ -190,7 +188,7 @@ class TestADEnvelopeProperties:
             floats_helper(min_value=attack_start + 1e-6, max_value=TIME_MIDPOINT - 1e-6)
         )
 
-        # amplitude_a must be small enough that 2× stays within AMPLITUDE_MAX
+        # amplitude_a must be small enough that 2x stays within AMPLITUDE_MAX
         amplitude_a = data.draw(
             floats_helper(
                 min_value=AMPLITUDE_LOWER_CUTOFF + 1e-4, max_value=AMPLITUDE_MAX / 2.0
@@ -206,7 +204,7 @@ class TestADEnvelopeProperties:
         )
         # Skip if we accidentally landed in the silent region (shouldn't happen
         # given the time constraint, but floating-point edge cases exist).
-        assume(v_a > 1e-10)
+        _ = assume(v_a > 1e-10)
 
         v_b = a_d_envelope(
             EnvelopeSettings(

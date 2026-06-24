@@ -9,6 +9,7 @@ cases live in their own dedicated tests and the fuzz tests stay clean.
 
 import pytest
 from faker import Faker
+from simulations.combiners import combine_interpolate_linear, combine_max
 from simulations.envelope import (
     AMPLITUDE_LOWER_CUTOFF,
     AMPLITUDE_MAX,
@@ -27,8 +28,6 @@ from simulations.envelope import (
     a_d_envelope,
     a_d_shape,
     combine_envelopes,
-    combine_interpolate_linear,
-    combine_max,
     offset_envelopes,
 )
 

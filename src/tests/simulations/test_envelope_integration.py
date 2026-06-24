@@ -10,16 +10,14 @@ envelopes).
 
 import pytest
 from faker import Faker
+from simulations.combiners import CombineFn, combine_interpolate_linear, combine_max
 from simulations.envelope import (
     AMPLITUDE_LOWER_CUTOFF,
     AMPLITUDE_MAX,
     TIME_END,
     TIME_START,
-    CombineFn,
     EnvelopeSettings,
     combine_envelopes,
-    combine_interpolate_linear,
-    combine_max,
     offset_envelopes,
 )
 
