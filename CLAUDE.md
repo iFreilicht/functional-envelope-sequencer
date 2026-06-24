@@ -29,7 +29,7 @@ You can never disable a rule globally (i.e. in pyproject.toml) without the user'
 - ✅ Core math implemented in Python (`src/simulations/simulations/envelope.py`)
 - ✅ Visual validation done in Jupyter notebook (`src/notebooks/`)
 - ✅ Comprehensive test suite covering all invariants, edge cases, and integration (`src/tests/`)
-- 🔲 Bug-Free implementation in Python
+- ✅ Bug-free implementation in Python
 - 🔲 C++ implementation of the VCV Rack module (not started)
 
 ---
