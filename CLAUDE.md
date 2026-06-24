@@ -12,11 +12,24 @@ With a traditional trigger-based approach, increasing attack time shifts the pea
 
 Implement FES as a VCV Rack plugin (C++). The mathematical core is being validated in Python first to catch bugs before C++ implementation begins.
 
+# Non-Goals
+
+The code in this repository is not consumed by any other party; all code consuming its APIs is in this very repository. This means that changes to its APIs and the code structure can be made quite liberally, as long as their coherent and don't break tests. Additionally, you do not need to put any thought into backwards-compatibility or being compatible with lower Python versions than what's specified in .python-version.
+
+## Guidelines
+
+This codebase is intended to be **correct** and **explicit**.
+
+Linter warnings are to be taken serioously! If a rule is disabled on a single line via a comment, another comment must be added to explain why disabling this rule is the correct thing to do in that case.
+
+You can never disable a rule globally (i.e. in pyproject.toml) without the user's explicit approval! Even if such a change was approved by the user, make sure you include it in the summary of your changes.
+
 ## Current status
 
 - ✅ Core math implemented in Python (`src/simulations/simulations/envelope.py`)
 - ✅ Visual validation done in Jupyter notebook (`src/notebooks/`)
 - ✅ Comprehensive test suite covering all invariants, edge cases, and integration (`src/tests/`)
+- 🔲 Bug-Free implementation in Python
 - 🔲 C++ implementation of the VCV Rack module (not started)
 
 ---
