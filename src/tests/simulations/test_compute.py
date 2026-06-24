@@ -102,8 +102,6 @@ class TestValueRange:
 
 
 class TestCombinerOrdering:
-    # TODO: Fix this once combine_interpolate_linear is corrected
-    @pytest.mark.xfail(reason="combine_interpolate_linear is broken right now")
     def test_max_never_less_than_linear(self):
         """combine_max output should never be smaller than combine_interpolate_linear,
         since interpolation between two values is bounded by their maximum."""

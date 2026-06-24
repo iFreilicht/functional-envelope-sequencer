@@ -237,8 +237,6 @@ class TestFullPipelineProperties:
         result = combine_envelopes(settings_list, statuses, time, combine_max)
         assert 0.0 <= result <= AMPLITUDE_MAX + 1e-9
 
-    # TODO: Fix this once we have better observability
-    @pytest.mark.xfail(reason="combine_interpolate_linear is broken right now")
     @given(
         settings_list=st.lists(_enabled_settings_strategy, min_size=2, max_size=6),
         interval=_interval_strategy,
@@ -275,8 +273,6 @@ class TestFullPipelineProperties:
             result = combine_envelopes(settings_list, statuses, time, combiner)
             assert result == 0.0
 
-    # TODO: Fix this once we have better observability
-    @pytest.mark.xfail(reason="combine_interpolate_linear is broken right now")
     @given(
         settings_list=st.lists(_enabled_settings_strategy, min_size=2, max_size=6),
         interval=_interval_strategy,

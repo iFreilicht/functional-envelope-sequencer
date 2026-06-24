@@ -38,6 +38,11 @@ fake = Faker()
 # ---------------------------------------------------------------------------
 
 
+def _random_time() -> float:
+    """Random time value including boundary values."""
+    return fake.pyfloat(min_value=TIME_START, max_value=TIME_END)
+
+
 def _random_shape() -> float:
     """Random shape strictly inside valid range (excludes boundary values)."""
     return fake.pyfloat(min_value=0.001, max_value=0.999)
@@ -319,7 +324,7 @@ class TestOffsetEnvelopes:
     def test_returns_correct_count(self):
         n = fake.pyint(min_value=1, max_value=8)
         settings_list = [_settings() for _ in range(n)]
-        interval = fake.pyfloat(min_value=0.01, max_value=0.5)
+        interval = fake.pyfloat(min_value=0.05, max_value=0.5)
         time = fake.pyfloat(min_value=TIME_START, max_value=TIME_END)
         result = offset_envelopes(settings_list, interval, time)
         assert len(result) == n
@@ -327,7 +332,7 @@ class TestOffsetEnvelopes:
     def test_env_times_in_range(self):
         n = fake.pyint(min_value=1, max_value=8)
         settings_list = [_settings() for _ in range(n)]
-        interval = fake.pyfloat(min_value=0.01, max_value=0.5)
+        interval = fake.pyfloat(min_value=0.05, max_value=0.5)
         time = fake.pyfloat(min_value=TIME_START, max_value=TIME_END)
         for status in offset_envelopes(settings_list, interval, time):
             assert TIME_START <= status.time < TIME_END + 1e-12
@@ -445,39 +450,53 @@ class TestCombineMax:
         [(0.3, 0.7), (0.7, 0.3), (0.5, 0.5)],
     )
     def test_returns_higher_value(self, left_value: float, right_value: float):
-        left = _status(time=0.5, value=left_value)
-        right = _status(time=1.5, value=right_value)
-        assert combine_max(left, right) == max(left_value, right_value)
+        left = _status(time=_random_time(), value=left_value)
+        right = _status(time=_random_time(), value=right_value)
+        time = _random_time()
+        assert combine_max(left, right, time) == max(left_value, right_value)
 
     def test_equal_values_returns_that_value(self):
-        v = fake.pyfloat(min_value=0.01, max_value=0.99)
-        left = _status(time=0.5, value=v)
-        right = _status(time=1.5, value=v)
-        assert combine_max(left, right) == pytest.approx(v)
+        v = fake.pyfloat(min_value=0, max_value=1.0)
+        left = _status(time=_random_time(), value=v)
+        right = _status(time=_random_time(), value=v)
+        time = _random_time()
+        assert combine_max(left, right, time) == pytest.approx(v)
 
 
 class TestCombineInterpolateLinear:
     def test_midpoint_equidistant_interpolation(self):
-        # left.time=0.5, right.time=1.5 → weight=(1.0-0.5)/(1.5-0.5)=0.5
-        left = _status(time=0.5, value=0.0)
-        right = _status(time=1.5, value=1.0)
-        assert combine_interpolate_linear(left, right) == pytest.approx(0.5)
+        left_midpoint = _random_time()
+        offset = fake.pyfloat(min_value=0.01, max_value=0.75)
+        time = (left_midpoint + offset) % TIME_END
+        right_midpoint = (time + offset) % TIME_END
+
+        left = _status(time=_random_time(), value=0.0, midpoint=left_midpoint)
+        right = _status(time=_random_time(), value=1.0, midpoint=right_midpoint)
+        assert combine_interpolate_linear(left, right, time) == pytest.approx(0.5)
 
     def test_output_in_value_range(self):
-        left_time = fake.pyfloat(min_value=TIME_START, max_value=TIME_MIDPOINT - 0.05)
-        right_time = fake.pyfloat(min_value=TIME_MIDPOINT + 0.05, max_value=TIME_END)
         lv = fake.pyfloat(min_value=0.01, max_value=0.99)
         rv = fake.pyfloat(min_value=0.01, max_value=0.99)
-        result = combine_interpolate_linear(
-            _status(left_time, lv), _status(right_time, rv)
-        )
+        left_midpoint = _random_time()
+        # time must lie strictly between left_midpoint and right_midpoint (mod TIME_END)
+        time = (left_midpoint + fake.pyfloat(min_value=0.01, max_value=0.75)) % TIME_END
+        right_midpoint = (
+            time + fake.pyfloat(min_value=0.01, max_value=0.75)
+        ) % TIME_END
+        left = _status(time=_random_time(), value=lv, midpoint=left_midpoint)
+        right = _status(time=_random_time(), value=rv, midpoint=right_midpoint)
+        result = combine_interpolate_linear(left, right, time)
         assert min(lv, rv) - 1e-9 <= result <= max(lv, rv) + 1e-9
 
     def test_equal_values_returns_that_value(self):
         v = fake.pyfloat(min_value=0.01, max_value=0.99)
-        left_time = fake.pyfloat(min_value=TIME_START, max_value=TIME_MIDPOINT - 0.05)
-        right_time = fake.pyfloat(min_value=TIME_MIDPOINT + 0.05, max_value=TIME_END)
-        result = combine_interpolate_linear(
-            _status(left_time, v), _status(right_time, v)
-        )
+        left_midpoint = _random_time()
+        # time must lie strictly between left_midpoint and right_midpoint (mod TIME_END)
+        time = (left_midpoint + fake.pyfloat(min_value=0.01, max_value=0.75)) % TIME_END
+        right_midpoint = (
+            time + fake.pyfloat(min_value=0.01, max_value=0.75)
+        ) % TIME_END
+        left = _status(time=_random_time(), value=v, midpoint=left_midpoint)
+        right = _status(time=_random_time(), value=v, midpoint=right_midpoint)
+        result = combine_interpolate_linear(left, right, time)
         assert result == pytest.approx(v)

@@ -108,7 +108,12 @@ ignore = [
 
 [tool.pyright]
 ignore = [".venv"]
+# Implicit string concatenation is very useful for breaking up long strings over
+# multiple lines
 reportImplicitStringConcatenation = false
+# Some functions must fulfil exact Protocols, making it impossible to prefix parameter
+# names with an underscore to indicate that they remain unused on purpose
+reportUnusedParameter = "hint"
 executionEnvironments = [
     { root = "src/simulations" },
     { root = "src/notebooks", extraPaths = [

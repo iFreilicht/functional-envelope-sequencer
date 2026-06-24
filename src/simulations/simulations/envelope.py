@@ -223,7 +223,7 @@ def offset_envelopes(
 
 class CombineFn(Protocol):
     @staticmethod
-    def __call__(left: EnvelopeStatus, right: EnvelopeStatus) -> float: ...
+    def __call__(left: EnvelopeStatus, right: EnvelopeStatus, time: float) -> float: ...
 
 
 def combine_envelopes(
@@ -299,8 +299,8 @@ def combine_envelopes(
     # Find the pair of envelopes we need to combine at the current point in time
     for left, right in pairwise(active_envelopes):
         if left.midpoint <= time <= right.midpoint:
-            return combiner(left, right)
+            return combiner(left, right, time)
 
     # If no pair was found, we're either to the left of the first or to the right of
     # the last envelope. Because we're wrapping around, these cases are equivalent
-    return combiner(active_envelopes[-1], active_envelopes[0])
+    return combiner(active_envelopes[-1], active_envelopes[0], time)

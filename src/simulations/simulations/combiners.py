@@ -6,7 +6,7 @@ that builds its choice list from ``COMBINERS.keys()`` will pick it up
 automatically.
 """
 
-from simulations.envelope import TIME_MIDPOINT, CombineFn, EnvelopeStatus
+from simulations.envelope import TIME_END, CombineFn, EnvelopeStatus
 
 __all__ = [
     "COMBINERS",
@@ -16,17 +16,33 @@ __all__ = [
 ]
 
 
-def combine_max(left: EnvelopeStatus, right: EnvelopeStatus) -> float:
+def combine_max(left: EnvelopeStatus, right: EnvelopeStatus, time: float) -> float:
     """Combine two adjacent envelopes by choosing the higher value."""
     return max(left.value, right.value)
 
 
-def combine_interpolate_linear(left: EnvelopeStatus, right: EnvelopeStatus) -> float:
+def combine_interpolate_linear(
+    left: EnvelopeStatus, right: EnvelopeStatus, time: float
+) -> float:
     """Combine two adjacent envelopes by interpolating between them linearly."""
-    scale = 1 / (right.time - left.time)
-    raw_weight = TIME_MIDPOINT - left.time
-    weight = raw_weight * scale
-    interpolated = (1 - weight) * left.value + weight * right.value
+    # Makes no sense to interpolate between two peaks that are at the same position.
+    # Should not occur as the minimum interval is greater than 0
+    assert left.midpoint != right.midpoint, f"Both peaks occur at {left.midpoint}"
+
+    peak_distance = (right.midpoint - left.midpoint) % TIME_END
+    progress_absolute = (time - left.midpoint) % TIME_END
+
+    assert peak_distance >= progress_absolute, (
+        f"Distance between peaks {peak_distance} is smaller than the "
+        "current progress {progress_absolute}"
+    )
+
+    progress = progress_absolute / peak_distance
+
+    # This should be impossible because of the previous assert
+    assert 0.0 <= progress <= 1.0, f"Progress {progress} outside of [0.0,1.0]"
+
+    interpolated = (1 - progress) * left.value + progress * right.value
     return interpolated
 
 
