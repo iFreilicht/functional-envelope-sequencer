@@ -236,7 +236,7 @@ class TestFullPipelineProperties:
     ):
         """Full pipeline with combine_max always stays in [0, AMPLITUDE_MAX]."""
         statuses = offset_envelopes(settings_list, interval, time)
-        result = combine_envelopes(settings_list, statuses, combine_max)
+        result = combine_envelopes(settings_list, statuses, time, combine_max)
         assert 0.0 <= result <= AMPLITUDE_MAX + 1e-9
 
     @given(
@@ -253,7 +253,9 @@ class TestFullPipelineProperties:
         """Full pipeline with combine_interpolate_linear always stays in
         [0, AMPLITUDE_MAX]."""
         statuses = offset_envelopes(settings_list, interval, time)
-        result = combine_envelopes(settings_list, statuses, combine_interpolate_linear)
+        result = combine_envelopes(
+            settings_list, statuses, time, combine_interpolate_linear
+        )
         assert 0.0 <= result <= AMPLITUDE_MAX + 1e-9
 
     @given(
@@ -270,7 +272,7 @@ class TestFullPipelineProperties:
         """When every envelope is disabled both combiners must return exactly 0."""
         statuses = offset_envelopes(settings_list, interval, time)
         for combiner in (combine_max, combine_interpolate_linear):
-            result = combine_envelopes(settings_list, statuses, combiner)
+            result = combine_envelopes(settings_list, statuses, time, combiner)
             assert result == 0.0
 
     @given(
@@ -288,8 +290,10 @@ class TestFullPipelineProperties:
         combine_interpolate_linear, because interpolation between two
         values is always ≤ the maximum of those values."""
         statuses = offset_envelopes(settings_list, interval, time)
-        v_max = combine_envelopes(settings_list, statuses, combine_max)
-        v_lin = combine_envelopes(settings_list, statuses, combine_interpolate_linear)
+        v_max = combine_envelopes(settings_list, statuses, time, combine_max)
+        v_lin = combine_envelopes(
+            settings_list, statuses, time, combine_interpolate_linear
+        )
         assert v_max >= v_lin - 1e-12
 
     def _combiner_ids(self) -> list[str]:
@@ -314,5 +318,5 @@ class TestFullPipelineProperties:
         triple — output range is checked across multiple time points."""
         for time in (TIME_START, TIME_MIDPOINT, TIME_END):
             statuses = offset_envelopes(settings_list, interval, time)
-            result = combine_envelopes(settings_list, statuses, combiner)
+            result = combine_envelopes(settings_list, statuses, time, combiner)
             assert 0.0 <= result <= AMPLITUDE_MAX + 1e-9

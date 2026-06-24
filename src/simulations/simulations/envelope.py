@@ -23,6 +23,8 @@ INTERVAL_MAX = 0.5
 SLOPE_TIME_MIN = 0.001
 TIME_START = 0.0
 TIME_MIN = TIME_START + SLOPE_TIME_MIN
+# Time is taken modulo `TIME_END` in many contexts, so this value is never actually
+# reached, but functions should be able to handle it and treat it like 0.0
 TIME_END = 2.0
 TIME_MIDPOINT = (TIME_START + TIME_END) / 2
 
@@ -142,6 +144,8 @@ def a_d_envelope(settings: EnvelopeSettings, time: float) -> float:
     >>> a_d_envelope(disabled, TIME_MIDPOINT)
     0.0
     """
+    assert TIME_START <= time <= TIME_END
+
     attack, decay, shape, amplitude = (
         settings.attack,
         settings.decay,
@@ -149,7 +153,6 @@ def a_d_envelope(settings: EnvelopeSettings, time: float) -> float:
         settings.amplitude,
     )
 
-    assert TIME_START <= time <= TIME_END
     if settings.is_disabled():
         return 0.0
 
@@ -182,10 +185,17 @@ class EnvelopeStatus:
     Expected to wrap back to `TIME_START` once `TIME_END` is reached.
     """
 
+    midpoint: float
+    """The global time at which this envelope's peak occurs. This is used to determine
+    which two envelopes to combine at any given point in time."""
+
     value: float
 
     def __post_init__(self):
         object.__setattr__(self, "time", clamp_checked(self.time, TIME_START, TIME_END))
+        object.__setattr__(
+            self, "midpoint", clamp_checked(self.midpoint, TIME_START, TIME_END)
+        )
         object.__setattr__(
             self, "value", clamp_checked(self.value, AMPLITUDE_MIN, AMPLITUDE_MAX)
         )
@@ -200,9 +210,13 @@ def offset_envelopes(
 
     envelopes_status: list[EnvelopeStatus] = []
     for i, env_settings in enumerate(envelopes_settings):
-        env_time = (time - interval * i) % TIME_END
+        env_offset = interval * i
+        env_time = (time - env_offset) % TIME_END
+        env_midpoint = (env_offset + TIME_MIDPOINT) % TIME_END
         value = a_d_envelope(env_settings, env_time)
-        envelopes_status.append(EnvelopeStatus(time=env_time, value=value))
+        envelopes_status.append(
+            EnvelopeStatus(time=env_time, midpoint=env_midpoint, value=value)
+        )
 
     return envelopes_status
 
@@ -215,6 +229,7 @@ class CombineFn(Protocol):
 def combine_envelopes(
     envelopes_settings: Sequence[EnvelopeSettings],
     envelopes_status: Sequence[EnvelopeStatus],
+    time: float,
     combiner: CombineFn,
 ) -> float:
     """
@@ -223,19 +238,21 @@ def combine_envelopes(
 
     Consider the example below, where `envelopes_status` has eight elements,
     represented by the letters a-h. `y` is the `EnvelopeStatus.time` value,
-    `x` is the global timeline, `t` is the current global time.
+    `x` is the global timeline, `t` is the parameter `time`.
 
     ```
                   y
-         TIME_END ^    a b c d e f g h
-                  |    / / / / / / / /
-                  |   / / / / / / / /
-    TIME_MIDPOINT |  / /⊙/ / / / / /
-                  | / / / / / / / /
-                  |/ / /|/ / / / /
-       TIME_START +--------------------> x
-                        |
-                        t
+         TIME_END ^g h a b c d e f |
+                  |/ / / / / / / / |
+                  | / / / / / / / /|
+    TIME_MIDPOINT |/ / /⊙/ / / / / |
+                  | / / / / / / / /|
+                  |/ / /|/ / / / / |
+       TIME_START +----------------+> x
+                        | |        |
+                        t |     TIME_END
+                          |
+                  TIME_MIDPOINT
     ```
 
     The `⊙` is the point under inspection, where `x=time` and
@@ -246,9 +263,18 @@ def combine_envelopes(
     The illustration is somewhat inaccurate; the slopes may be much shallower
     and closer together, so multiple slopes can overlap at once.
 
+    It does accurately depict the wrapping behavior, however; `time` is always taken
+    modulo `TIME_END`, so the envelopes effectively wrap around. This means that desipte
+    envelope `a` starting at `t=0`, the one having its peak at `t=0` is a different one.
+    (Which one exactly depends on the interval they're spaced at.)
+
     Disabled envelopes are skipped, so if `c` and `d` were disabled, envelope
     `b` would be combined with `e` when their slopes overlap.
     """
+    # TODO: Special handling on the first time loop (time < 1.0) so the envelope can
+    # start smoothly
+    time = time % TIME_END
+
     # Discard all envelopes that are disabled so combining longer envelopes that aren't
     # directly adjacent to each other works as expected
     active_envelopes: list[EnvelopeStatus] = []
@@ -268,16 +294,15 @@ def combine_envelopes(
     if len(active_envelopes) == 1:
         return active_envelopes[0].value
 
+    active_envelopes.sort(key=lambda s: s.midpoint)
+
     # Find the pair of envelopes we need to combine at the current point in time
-    for left, right in pairwise((*active_envelopes, active_envelopes[0])):
-        if left.time >= TIME_MIDPOINT >= right.time:
+    for left, right in pairwise(active_envelopes):
+        if left.midpoint <= time <= right.midpoint:
             return combiner(left, right)
 
-    # It is possible that no pair was found. This can happen if they are spaced at
-    # an interval that is less than `(TIME_END - TIME_START) / len(envelopes)` or
-    # if a lot of the later envelopes were disabled.
-    # In this case, we always have the last active envelope on the left and the
-    # first on the right.
+    # If no pair was found, we're either to the left of the first or to the right of
+    # the last envelope. Because we're wrapping around, these cases are equivalent
     return combiner(active_envelopes[-1], active_envelopes[0])
 
 

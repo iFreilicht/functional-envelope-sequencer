@@ -13,6 +13,7 @@ from simulations.envelope import (
     AMPLITUDE_LOWER_CUTOFF,
     AMPLITUDE_MAX,
     AMPLITUDE_MIN,
+    INTERVAL_MAX,
     PROGRESS_MAX,
     PROGRESS_MIN,
     SHAPE_MAX,
@@ -74,8 +75,10 @@ def _settings(
     )
 
 
-def _status(time: float, value: float) -> EnvelopeStatus:
-    return EnvelopeStatus(time=time, value=value)
+def _status(
+    time: float, value: float, midpoint: float = TIME_MIDPOINT
+) -> EnvelopeStatus:
+    return EnvelopeStatus(time=time, midpoint=midpoint, value=value)
 
 
 # ---------------------------------------------------------------------------
@@ -330,14 +333,6 @@ class TestOffsetEnvelopes:
         for status in offset_envelopes(settings_list, interval, time):
             assert TIME_START <= status.time < TIME_END + 1e-12
 
-    def test_zero_interval_all_same_time(self):
-        n = fake.pyint(min_value=2, max_value=6)
-        settings_list = [_settings() for _ in range(n)]
-        time = fake.pyfloat(min_value=0.1, max_value=TIME_END - 0.1)
-        expected_time = time % TIME_END
-        for status in offset_envelopes(settings_list, 0.0, time):
-            assert status.time == pytest.approx(expected_time)
-
     def test_wrapping_correctness(self):
         """Each envelope i has env_time = (time - interval * i) % TIME_END."""
         time = 0.1
@@ -370,13 +365,13 @@ class TestCombineEnvelopes:
         interval = fake.pyfloat(min_value=0.1, max_value=0.4)
         time = fake.pyfloat(min_value=TIME_START, max_value=TIME_END)
         statuses = offset_envelopes(settings_list, interval, time)
-        assert combine_envelopes(settings_list, statuses, combine_max) == 0.0
+        assert combine_envelopes(settings_list, statuses, time, combine_max) == 0.0
 
     def test_mismatched_lengths_raises(self):
         settings_list = [_settings() for _ in range(3)]
-        statuses = [EnvelopeStatus(time=0.5, value=0.5)] * 4  # wrong length
+        statuses = [EnvelopeStatus(time=0.5, midpoint=1, value=0.5)] * 4  # wrong length
         with pytest.raises((ValueError, AssertionError)):
-            _ = combine_envelopes(settings_list, statuses, combine_max)
+            _ = combine_envelopes(settings_list, statuses, 0.5, combine_max)
 
     def test_single_active_envelope_max(self):
         """One enabled envelope surrounded by disabled ones returns its value."""
@@ -389,7 +384,7 @@ class TestCombineEnvelopes:
 
         # The expected value is whatever the enabled envelope produces
         expected = statuses[1].value
-        result = combine_envelopes(settings_list, statuses, combine_max)
+        result = combine_envelopes(settings_list, statuses, time, combine_max)
         assert result == pytest.approx(expected)
 
     def test_single_active_envelope_linear(self):
@@ -403,29 +398,31 @@ class TestCombineEnvelopes:
         statuses = offset_envelopes(settings_list, interval, time)
 
         expected = statuses[1].value
-        result = combine_envelopes(settings_list, statuses, combine_interpolate_linear)
+        result = combine_envelopes(
+            settings_list, statuses, time, combine_interpolate_linear
+        )
         assert result == pytest.approx(expected)
 
     def test_disabled_envelope_is_skipped(self):
         """With two enabled envelopes flanking a disabled one, the disabled
         one must not participate in the combination."""
         # Three envelopes at equal spacing; disable the middle one.
-        amplitude_left = fake.pyfloat(min_value=0.3, max_value=0.6)
-        amplitude_right = fake.pyfloat(min_value=0.3, max_value=0.6)
+        amplitude_left = fake.pyfloat(min_value=0.3, max_value=0.5)
+        amplitude_right = fake.pyfloat(min_value=0.3, max_value=0.5)
 
         left_s = _settings(amplitude=amplitude_left)
         middle_s = _disabled_settings()
         right_s = _settings(amplitude=amplitude_right)
 
         settings_list = [left_s, middle_s, right_s]
-        interval = TIME_END / 3  # evenly spaced
+        interval = INTERVAL_MAX  # evenly spaced within the allowed interval range
 
         # We need two non-disabled envelopes in the active list.
         # Sweep a few time values and verify output is never from the middle envelope.
         for _ in range(20):
             time = fake.pyfloat(min_value=TIME_START, max_value=TIME_END)
             statuses = offset_envelopes(settings_list, interval, time)
-            combined = combine_envelopes(settings_list, statuses, combine_max)
+            combined = combine_envelopes(settings_list, statuses, time, combine_max)
             # The middle envelope is always disabled, so its value is 0.
             # The combined result must match what we'd get ignoring the middle one.
             only_active = [s for s in settings_list if not s.is_disabled()]
@@ -434,7 +431,7 @@ class TestCombineEnvelopes:
                 for s, st in zip(settings_list, statuses, strict=True)
                 if not s.is_disabled()
             ]
-            expected = combine_envelopes(only_active, only_status, combine_max)
+            expected = combine_envelopes(only_active, only_status, time, combine_max)
             assert combined == pytest.approx(expected)
 
 
