@@ -8,6 +8,7 @@
       "Bash(direnv exec . uv run basedpyright *)",
       "Bash(direnv exec . env | grep RACK_DIR)",
       "Bash(direnv exec . make cpp-test)",
+      "Bash(direnv exec . make)",
       "Bash(echo \"exit: $?\")"
     ]
   }

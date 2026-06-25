@@ -218,6 +218,102 @@ struct FES8 : Module {
 };
 
 
+// ---------------------------------------------------------------------------
+// EnvelopeDisplay — live curve preview above the knob grid
+//
+// Extends LedDisplay (provides the dark recessed background).  On every UI
+// frame (layer == 1) it reads the current parameter values, evaluates the
+// eight offset envelopes + the combined output at NUM_STEPS evenly-spaced
+// time points, and draws them as NanoVG polylines — same idiom as the
+// VCV Rack ADSR EG and WT VCO/LFO built-in modules.
+//
+// module may be nullptr (module-browser preview) in which case nothing is
+// drawn and the LedDisplay background is shown blank.
+// ---------------------------------------------------------------------------
+struct EnvelopeDisplay : LedDisplay {
+	FES8* module = nullptr;
+
+	void drawLayer(const DrawArgs& args, int layer) override {
+		if (layer == 1 && module) {
+			// These constants translate and scale the display output to Position the peak of
+			// every envelope above the knobs which control their parameters
+			static constexpr float DISPLAY_OFFSET = fes::TIME_MIDPOINT - 0.3;
+			static constexpr float DISPLAY_SCALE = 1.1;
+
+			static constexpr int NUM_STEPS = 200;
+			const int N    = FES8::NUM_ENVELOPES;
+			const float W  = box.size.x;
+			const float H  = box.size.y;
+
+			// Read current knob values from the module
+			fes::EnvelopeSettings settings[FES8::NUM_ENVELOPES];
+			for (int i = 0; i < N; ++i) {
+				settings[i] = {
+					module->params[FES8::ATTACK1_PARAM    + i].getValue(),
+					module->params[FES8::DECAY1_PARAM     + i].getValue(),
+					module->params[FES8::SHAPE1_PARAM     + i].getValue(),
+					module->params[FES8::AMPLITUDE1_PARAM + i].getValue()
+				};
+			}
+			const float intervalKnob = module->params[FES8::INTERVAL_PARAM].getValue();
+			const float interval =
+				fes::INTERVAL_MIN + intervalKnob * (fes::INTERVAL_MAX - fes::INTERVAL_MIN);
+			const bool useLinear =
+				module->params[FES8::COMBINER_PARAM].getValue() >= 0.5f;
+
+			// Evaluate envelopes at NUM_STEPS+1 equally-spaced time points
+			float indValues[NUM_STEPS + 1][FES8::NUM_ENVELOPES];
+			float combValues[NUM_STEPS + 1];
+			for (int step = 0; step <= NUM_STEPS; ++step) {
+				const float base_time = (fes::TIME_END * static_cast<float>(step) / NUM_STEPS);
+				// Display time; scaled and translated
+				const float t = (base_time + DISPLAY_OFFSET) * DISPLAY_SCALE;
+					
+				fes::EnvelopeStatus statuses[FES8::NUM_ENVELOPES];
+				fes::offsetEnvelopes(settings, N, interval, t, statuses);
+				for (int i = 0; i < N; ++i)
+					indValues[step][i] = statuses[i].value;
+				combValues[step] = fes::combineEnvelopes(statuses, N, t, useLinear);
+			}
+
+			nvgScissor(args.vg, 0.f, 0.f, W, H);
+
+			// Individual envelopes — faint white, 1 px
+			for (int i = 0; i < N; ++i) {
+				nvgBeginPath(args.vg);
+				for (int step = 0; step <= NUM_STEPS; ++step) {
+					const float x = W * static_cast<float>(step) / NUM_STEPS;
+					// value=0 → bottom of widget, value=1 → top;
+					// screen y-axis is inverted, so y = H*(1-value)
+					const float y = H * (1.f - indValues[step][i]);
+					if (step == 0) nvgMoveTo(args.vg, x, y);
+					else           nvgLineTo(args.vg, x, y);
+				}
+				nvgStrokeColor(args.vg, nvgRGBAf(1.f, 1.f, 1.f, 0.25f));
+				nvgStrokeWidth(args.vg, 1.0f);
+				nvgStroke(args.vg);
+			}
+
+			// Combined envelope — yellow, 1.5 px, rounded line-caps
+			nvgBeginPath(args.vg);
+			for (int step = 0; step <= NUM_STEPS; ++step) {
+				const float x = W * static_cast<float>(step) / NUM_STEPS;
+				const float y = H * (1.f - combValues[step]);
+				if (step == 0) nvgMoveTo(args.vg, x, y);
+				else           nvgLineTo(args.vg, x, y);
+			}
+			nvgLineCap(args.vg, NVG_ROUND);
+			nvgStrokeWidth(args.vg, 1.5f);
+			nvgStrokeColor(args.vg, SCHEME_YELLOW);
+			nvgStroke(args.vg);
+
+			nvgResetScissor(args.vg);
+		}
+		LedDisplay::drawLayer(args, layer);
+	}
+};
+
+
 struct FES8Widget : ModuleWidget {
 	FES8Widget(FES8* module) {
 		setModule(module);
@@ -286,8 +382,10 @@ struct FES8Widget : ModuleWidget {
 		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(142.108, 108.443)), module, FES8::PEAK7_LIGHT));
 		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(156.403, 108.443)), module, FES8::PEAK8_LIGHT));
 
-		// mm2px(Vec(126.796, 31.699))
-		addChild(createWidget<Widget>(mm2px(Vec(41.81, 4.099))));
+		EnvelopeDisplay* display = createWidget<EnvelopeDisplay>(mm2px(Vec(41.81, 4.099)));
+		display->box.size = mm2px(Vec(126.796, 31.699));
+		display->module   = module;
+		addChild(display);
 	}
 };
 
