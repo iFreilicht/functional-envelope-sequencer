@@ -3,8 +3,14 @@
 //
 // No VCV Rack SDK headers are included here so this file can be unit-tested
 // without linking against libRack.  All public symbols live in namespace fes.
+//
+// Define FES_ENABLE_ASSERTIONS before including this header (e.g. via
+// -DFES_ENABLE_ASSERTIONS on the compiler command line) to enable range-checking
+// assertions in clamp_checked.  This is done automatically by the Makefile's
+// cpp-test target.
 
 #include <algorithm>  // std::sort, std::max
+#include <cassert>    // assert
 #include <cmath>      // std::pow, std::fmod
 
 namespace fes {
@@ -16,6 +22,22 @@ namespace fes {
 template <typename T>
 inline T clamp(T value, T lo, T hi) {
     return value < lo ? lo : (value > hi ? hi : value);
+}
+
+// ---------------------------------------------------------------------------
+// clamp_checked — like clamp, but asserts that the input is within
+// [lo - tolerance, hi + tolerance] when FES_ENABLE_ASSERTIONS is defined.
+// Use this instead of clamp wherever an out-of-range input indicates a
+// programming error (i.e. the caller is responsible for passing valid values).
+// Use plain clamp for internal floating-point overshoot guards.
+// ---------------------------------------------------------------------------
+template <typename T>
+inline T clamp_checked(T value, T lo, T hi) {
+#ifdef FES_ENABLE_ASSERTIONS
+    constexpr T tolerance = T(1e-6);
+    assert(value >= lo - tolerance && value <= hi + tolerance);
+#endif
+    return clamp(value, lo, hi);
 }
 
 // ---------------------------------------------------------------------------
@@ -50,8 +72,8 @@ constexpr float SHAPE_MAX             = 1.0f;
 //   s = 1 → degree-10 polynomial (f = x^10)
 // ---------------------------------------------------------------------------
 inline float adShape(float shape, float progress) {
-    shape    = clamp(shape,    SHAPE_MIN,    SHAPE_MAX);
-    progress = clamp(progress, 0.0f, 1.0f);
+    shape    = clamp_checked(shape,    SHAPE_MIN, SHAPE_MAX);
+    progress = clamp_checked(progress, 0.0f,      1.0f);
 
     const float s = shape;
     const float x = progress;
@@ -68,10 +90,10 @@ inline float adShape(float shape, float progress) {
 // EnvelopeSettings — per-channel parameters
 // ---------------------------------------------------------------------------
 struct EnvelopeSettings {
-    float attack;     // seconds; clamped to [SLOPE_TIME_MIN, TIME_MIDPOINT]
-    float decay;      // seconds; clamped to [SLOPE_TIME_MIN, TIME_MIDPOINT]
-    float shape;      // [SHAPE_MIN, SHAPE_MAX]
-    float amplitude;  // [AMPLITUDE_MIN, AMPLITUDE_MAX]
+    float attack;     // seconds; expected in [SLOPE_TIME_MIN, TIME_MIDPOINT]
+    float decay;      // seconds; expected in [SLOPE_TIME_MIN, TIME_MIDPOINT]
+    float shape;      // expected in [SHAPE_MIN, SHAPE_MAX]
+    float amplitude;  // expected in [AMPLITUDE_MIN, AMPLITUDE_MAX]
 
     bool isEnabled() const { return amplitude > AMPLITUDE_LOWER_CUTOFF; }
 };
@@ -84,12 +106,16 @@ struct EnvelopeSettings {
 // and 0 outside them.  Returns 0 immediately for disabled envelopes.
 // ---------------------------------------------------------------------------
 inline float adEnvelope(const EnvelopeSettings& s, float time) {
+#ifdef FES_ENABLE_ASSERTIONS
+    assert(TIME_START <= time && time <= TIME_END);
+#endif
+
     if (!s.isEnabled()) return 0.0f;
 
-    const float attack    = clamp(s.attack,    SLOPE_TIME_MIN, TIME_MIDPOINT);
-    const float decay     = clamp(s.decay,     SLOPE_TIME_MIN, TIME_MIDPOINT);
-    const float shape     = clamp(s.shape,     SHAPE_MIN,      SHAPE_MAX);
-    const float amplitude = clamp(s.amplitude, AMPLITUDE_MIN,  AMPLITUDE_MAX);
+    const float attack    = clamp_checked(s.attack,    SLOPE_TIME_MIN, TIME_MIDPOINT);
+    const float decay     = clamp_checked(s.decay,     SLOPE_TIME_MIN, TIME_MIDPOINT);
+    const float shape     = clamp_checked(s.shape,     SHAPE_MIN,      SHAPE_MAX);
+    const float amplitude = clamp_checked(s.amplitude, AMPLITUDE_MIN,  AMPLITUDE_MAX);
 
     float value;
     if (time <= TIME_MIDPOINT) {
@@ -132,12 +158,12 @@ inline void offsetEnvelopes(
         float                   time,
         EnvelopeStatus*         out) {
 
-    interval = clamp(interval, INTERVAL_MIN, INTERVAL_MAX);
+    interval = clamp_checked(interval, INTERVAL_MIN, INTERVAL_MAX);
 
     for (int i = 0; i < n; ++i) {
         const float offset    = interval * static_cast<float>(i);
         const float envTime   = std::fmod(time - offset + 4.0f * TIME_END, TIME_END);
-        const float midpoint  = std::fmod(offset + TIME_MIDPOINT,         TIME_END);
+        const float midpoint  = std::fmod(offset + TIME_MIDPOINT,          TIME_END);
 
         out[i] = EnvelopeStatus{
             envTime,
@@ -169,7 +195,8 @@ inline float combineLinear(const EnvelopeStatus& left, const EnvelopeStatus& rig
     const float progressAbsolute = std::fmod(
         time - left.midpoint + TIME_END, TIME_END);
 
-    // Clamp to avoid floating-point overshoot past 1.0
+    // Clamp to guard against floating-point overshoot — not a user-error site,
+    // so plain clamp (not clamp_checked) is appropriate here.
     const float progress = clamp(progressAbsolute / peakDistance, 0.0f, 1.0f);
 
     return (1.0f - progress) * left.value + progress * right.value;

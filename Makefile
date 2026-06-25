@@ -30,7 +30,7 @@ CPP_TEST_SRC = src/tests/cpp/test_fes_dsp.cpp
 CPP_TEST_BIN = src/tests/cpp/test_fes_dsp
 
 $(CPP_TEST_BIN): $(CPP_TEST_SRC) src/fes_dsp.hpp
-	$(CXX) -std=c++17 -Wall -Wextra -I src -o $@ $< -lCatch2Main -lCatch2
+	$(CXX) -std=c++17 -Wall -Wextra -I src -DFES_ENABLE_ASSERTIONS -o $@ $< -lCatch2Main -lCatch2
 
 cpp-test: $(CPP_TEST_BIN)
 	$(CPP_TEST_BIN)

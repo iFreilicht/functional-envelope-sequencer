@@ -79,19 +79,29 @@ struct FES8 : Module {
 
 	// Runtime state
 	float phase = 0.f;    // current position in [0, TIME_END)
-	bool running = true; // TODO: make this false again!
+	bool running = false;
 	dsp::SchmittTrigger startTrigger;
 	dsp::SchmittTrigger stopTrigger;
 	dsp::PulseGenerator timeoutPulse;
+	dsp::PulseGenerator peakPulse[NUM_ENVELOPES];
+
+	// Default knob position for INTERVAL_PARAM so that pressing "Initialise"
+	// spaces 8 envelopes evenly: interval = TIME_END / 8 = 0.25
+	// Knob maps linearly: interval = INTERVAL_MIN + k * (INTERVAL_MAX - INTERVAL_MIN)
+	// → k = (0.25 - 0.05) / (0.5 - 0.05) = 4/9
+	static constexpr float INTERVAL_DEFAULT_KNOB =
+		(fes::TIME_END / NUM_ENVELOPES - fes::INTERVAL_MIN) /
+		(fes::INTERVAL_MAX - fes::INTERVAL_MIN);
 
 	FES8() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 
 		// Global controls
-		configButton(START_PARAM,   "Start");
-		configButton(STOP_PARAM,    "Stop");
-		configParam(TEMPO_PARAM,    0.f, 1.f, 0.5f, "Tempo",   " Hz", 8.f, 0.5f);
-		configParam(INTERVAL_PARAM, 0.f, 1.f, 0.5f, "Interval (peak spacing)");
+		configButton(START_PARAM, "Start");
+		configButton(STOP_PARAM,  "Stop");
+		configParam(TEMPO_PARAM,    0.f, 1.f, 0.5f, "Tempo");
+		configParam(INTERVAL_PARAM, 0.f, 1.f, INTERVAL_DEFAULT_KNOB,
+			"Interval (peak spacing)");
 		configSwitch(COMBINER_PARAM, 0.f, 1.f, 0.f, "Combiner", {"Max", "Linear"});
 
 		// Per-envelope controls
@@ -108,7 +118,7 @@ struct FES8 : Module {
 		}
 
 		// Outputs
-		configOutput(TIMEOUT_OUTPUT,    "Timeout (loop-wrap trigger)");
+		configOutput(TIMEOUT_OUTPUT, "Timeout (envelope 0 peak trigger)");
 		for (int i = 0; i < NUM_ENVELOPES; ++i) {
 			configOutput(OUT1_OUTPUT + i,
 				rack::string::f("Envelope %s", chNames[i]));
@@ -126,39 +136,60 @@ struct FES8 : Module {
 			running = false;
 		}
 
-		// --- Advance phase ---
-		if (running) {
-			// Exponential tempo mapping: knob 0→0.5 Hz, 0.5→2 Hz, 1→4 Hz
-			// rate = 0.5 * 8^knob  →  [0.5, 4.0] Hz
-			const float tempoKnob = params[TEMPO_PARAM].getValue();
-			const float rate      = 0.5f * std::pow(8.f, tempoKnob);
+		// --- Interval (read early so peak positions can be computed) ---
+		const float intervalKnob = params[INTERVAL_PARAM].getValue();
+		const float interval = fes::INTERVAL_MIN
+			+ intervalKnob * (fes::INTERVAL_MAX - fes::INTERVAL_MIN);
 
-			phase += rate * args.sampleTime;
-			if (phase >= fes::TIME_END) {
-				phase = std::fmod(phase, fes::TIME_END);
-				timeoutPulse.trigger(1e-3f);  // 1 ms trigger on loop wrap
+		// --- Advance phase and detect peak crossings ---
+		// prevPhase and rawPhase are used for edge detection before wrapping.
+		const float prevPhase = phase;
+		float rawPhase = phase;
+
+		if (running) {
+			// Exponential tempo mapping: knob 0→0.5 Hz, 0.5→~31.6 Hz, 1→2000 Hz
+			// rate = 0.5 * 4000^knob  →  [0.5, 2000] Hz
+			const float tempoKnob = params[TEMPO_PARAM].getValue();
+			const float rate = 0.5f * std::pow(4000.f, tempoKnob);
+			rawPhase = prevPhase + rate * args.sampleTime;
+			phase = std::fmod(rawPhase, fes::TIME_END);
+		}
+
+		// Detect peak crossings for each envelope, including the timeout (envelope 0).
+		// The timeout fires on envelope 0's peak — same instant as PEAK1_LIGHT.
+		for (int i = 0; i < NUM_ENVELOPES; ++i) {
+			const float peakGlobal =
+				std::fmod(fes::TIME_MIDPOINT + interval * static_cast<float>(i),
+				          fes::TIME_END);
+
+			bool crossed;
+			if (rawPhase < fes::TIME_END) {
+				// No wrap this sample
+				crossed = prevPhase < peakGlobal && rawPhase >= peakGlobal;
+			} else {
+				// Phase wrapped; the crossing could be either side of TIME_END
+				const float wrappedPhase = rawPhase - fes::TIME_END;
+				crossed = prevPhase < peakGlobal || wrappedPhase >= peakGlobal;
+			}
+
+			if (crossed) {
+				peakPulse[i].trigger(0.05f);  // 50 ms visible flash
+				if (i == 0) {
+					timeoutPulse.trigger(1e-3f);  // 1 ms sync trigger
+				}
 			}
 		}
 
 		// --- Build per-envelope settings ---
 		fes::EnvelopeSettings settings[NUM_ENVELOPES];
 		for (int i = 0; i < NUM_ENVELOPES; ++i) {
-			// Exponential attack/decay mapping: knob 0 → SLOPE_TIME_MIN, 1 → TIME_MIDPOINT
-			const float attackKnob = params[ATTACK1_PARAM + i].getValue();
-			const float decayKnob  = params[DECAY1_PARAM  + i].getValue();
-
 			settings[i] = {
-				fes::SLOPE_TIME_MIN * std::pow(fes::TIME_MIDPOINT / fes::SLOPE_TIME_MIN, attackKnob),
-				fes::SLOPE_TIME_MIN * std::pow(fes::TIME_MIDPOINT / fes::SLOPE_TIME_MIN, decayKnob),
+				params[ATTACK1_PARAM    + i].getValue(),
+				params[DECAY1_PARAM     + i].getValue(),
 				params[SHAPE1_PARAM     + i].getValue(),
 				params[AMPLITUDE1_PARAM + i].getValue()
 			};
 		}
-
-		// --- Interval ---
-		const float intervalKnob = params[INTERVAL_PARAM].getValue();
-		const float interval = fes::INTERVAL_MIN
-			+ intervalKnob * (fes::INTERVAL_MAX - fes::INTERVAL_MIN);
 
 		// --- Compute envelope status for all channels ---
 		fes::EnvelopeStatus statuses[NUM_ENVELOPES];
@@ -169,9 +200,9 @@ struct FES8 : Module {
 			// Scale 0–1 → 0–10 V (VCV Rack unipolar CV convention)
 			outputs[OUT1_OUTPUT + i].setVoltage(statuses[i].value * 10.f);
 
-			// Peak light: smooth fade, lights up near the envelope peak
-			const float brightness = (statuses[i].value >= 0.99f) ? 1.f : 0.f;
-			lights[PEAK1_LIGHT + i].setBrightnessSmooth(brightness, args.sampleTime);
+			// Peak light: brief flash when this envelope's peak is crossed
+			lights[PEAK1_LIGHT + i].setBrightness(
+				peakPulse[i].process(args.sampleTime) ? 1.f : 0.f);
 		}
 
 		// --- Combined output ---
@@ -197,13 +228,13 @@ struct FES8Widget : ModuleWidget {
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(24.459, 25.297)), module, FES8::START_PARAM));
+		addParam(createParamCentered<VCVButton>(mm2px(Vec(24.459, 25.297)), module, FES8::START_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(56.618, 47.163)), module, FES8::ATTACK1_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(70.74, 47.156)), module, FES8::ATTACK2_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(84.908, 47.191)), module, FES8::ATTACK3_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(99.034, 47.179)), module, FES8::ATTACK4_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(113.202, 47.214)), module, FES8::ATTACK5_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(24.977, 48.167)), module, FES8::STOP_PARAM));
+		addParam(createParamCentered<VCVButton>(mm2px(Vec(24.977, 48.167)), module, FES8::STOP_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(127.363, 47.204)), module, FES8::ATTACK6_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(141.489, 47.192)), module, FES8::ATTACK7_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(155.657, 47.227)), module, FES8::ATTACK8_PARAM));
@@ -233,7 +264,7 @@ struct FES8Widget : ModuleWidget {
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(127.329, 97.967)), module, FES8::AMPLITUDE6_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(141.455, 97.955)), module, FES8::AMPLITUDE7_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(155.623, 97.99)), module, FES8::AMPLITUDE8_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(17.883, 116.031)), module, FES8::COMBINER_PARAM));
+		addParam(createParamCentered<CKSS>(mm2px(Vec(17.883, 116.031)), module, FES8::COMBINER_PARAM));
 
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(189.284, 75.255)), module, FES8::TIMEOUT_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(56.59, 116.567)), module, FES8::OUT1_OUTPUT));
