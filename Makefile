@@ -26,11 +26,17 @@ include $(RACK_DIR)/plugin.mk
 # C++ unit tests (fes_dsp.hpp, independent of the Rack SDK)
 # Run with:  make cpp-test
 # ---------------------------------------------------------------------------
-CPP_TEST_SRC = src/tests/cpp/test_fes_dsp.cpp
-CPP_TEST_BIN = src/tests/cpp/test_fes_dsp
+CPP_TEST_SRC     = src/tests/cpp/test_fes_dsp.cpp
+CPP_TEST_BIN     = build/tests/test_fes_dsp
+CPP_TEST_CFLAGS  := $(shell pkg-config --cflags catch2-with-main)
+CPP_TEST_LDFLAGS := $(shell pkg-config --libs   catch2-with-main)
 
-$(CPP_TEST_BIN): $(CPP_TEST_SRC) src/fes_dsp.hpp
-	$(CXX) -std=c++17 -Wall -Wextra -I src -DFES_ENABLE_ASSERTIONS -o $@ $< -lCatch2Main -lCatch2
+build/tests:
+	mkdir -p $@
+
+$(CPP_TEST_BIN): $(CPP_TEST_SRC) src/fes_dsp.hpp | build/tests
+	$(CXX) -std=c++17 -Wall -Wextra -I src -DFES_ENABLE_ASSERTIONS \
+	    $(CPP_TEST_CFLAGS) -o $@ $< $(CPP_TEST_LDFLAGS)
 
 cpp-test: $(CPP_TEST_BIN)
 	$(CPP_TEST_BIN)

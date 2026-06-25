@@ -8,6 +8,9 @@
 /build
 /dep
 /dist
+# C++ test binary (built into /build/tests/ — also covered by /build above,
+# but listed explicitly to prevent accidental staging next to the source)
+src/tests/cpp/test_fes_dsp
 
 # Python
 __pycache__
