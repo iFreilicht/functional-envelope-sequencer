@@ -9,8 +9,7 @@ struct FES8 : Module {
 
 	enum ParamId {
 		// Global controls
-		START_PARAM,
-		STOP_PARAM,
+		RUN_PARAM,
 		TEMPO_PARAM,
 		INTERVAL_PARAM,
 		COMBINER_PARAM,
@@ -53,7 +52,8 @@ struct FES8 : Module {
 		INPUTS_LEN
 	};
 	enum OutputId {
-		TIMEOUT_OUTPUT,
+		LOOP_OUTPUT,
+		CLOCK_OUTPUT,
 		OUT1_OUTPUT,
 		OUT2_OUTPUT,
 		OUT3_OUTPUT,
@@ -80,9 +80,8 @@ struct FES8 : Module {
 	// Runtime state
 	float phase = 0.f;    // current position in [0, TIME_END)
 	bool running = false;
-	dsp::SchmittTrigger startTrigger;
-	dsp::SchmittTrigger stopTrigger;
-	dsp::PulseGenerator timeoutPulse;
+	dsp::PulseGenerator loopPulse;              // fires on envelope 0's peak
+	dsp::PulseGenerator clockPulse;             // fires on every envelope's peak
 	dsp::PulseGenerator peakPulse[NUM_ENVELOPES];
 
 	// Default knob position for INTERVAL_PARAM so that pressing "Initialise"
@@ -97,8 +96,7 @@ struct FES8 : Module {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 
 		// Global controls
-		configButton(START_PARAM, "Start");
-		configButton(STOP_PARAM,  "Stop");
+		configButton(RUN_PARAM, "Run");
 		configParam(TEMPO_PARAM,    0.f, 1.f, 0.5f, "Tempo");
 		configParam(INTERVAL_PARAM, 0.f, 1.f, INTERVAL_DEFAULT_KNOB,
 			"Interval (peak spacing)");
@@ -118,7 +116,8 @@ struct FES8 : Module {
 		}
 
 		// Outputs
-		configOutput(TIMEOUT_OUTPUT, "Timeout (envelope 0 peak trigger)");
+		configOutput(LOOP_OUTPUT,  "Loop (envelope 0 peak trigger)");
+		configOutput(CLOCK_OUTPUT, "Clock (all envelope peak triggers)");
 		for (int i = 0; i < NUM_ENVELOPES; ++i) {
 			configOutput(OUT1_OUTPUT + i,
 				rack::string::f("Envelope %s", chNames[i]));
@@ -127,14 +126,8 @@ struct FES8 : Module {
 	}
 
 	void process(const ProcessArgs& args) override {
-		// --- START / STOP buttons ---
-		if (startTrigger.process(params[START_PARAM].getValue())) {
-			running = true;
-			phase   = 0.f;
-		}
-		if (stopTrigger.process(params[STOP_PARAM].getValue())) {
-			running = false;
-		}
+		// --- RUN latch button ---
+		running = params[RUN_PARAM].getValue() >= 0.5f;
 
 		// --- Interval (read early so peak positions can be computed) ---
 		const float intervalKnob = params[INTERVAL_PARAM].getValue();
@@ -173,9 +166,10 @@ struct FES8 : Module {
 			}
 
 			if (crossed) {
-				peakPulse[i].trigger(0.05f);  // 50 ms visible flash
+				peakPulse[i].trigger(0.05f);   // 50 ms visible flash
+				clockPulse.trigger(1e-3f);     // 1 ms clock trigger on every peak
 				if (i == 0) {
-					timeoutPulse.trigger(1e-3f);  // 1 ms sync trigger
+					loopPulse.trigger(1e-3f);  // 1 ms loop trigger on envelope 0 only
 				}
 			}
 		}
@@ -211,9 +205,11 @@ struct FES8 : Module {
 			statuses, NUM_ENVELOPES, phase, useLinear);
 		outputs[COMBINEDOUT_OUTPUT].setVoltage(combined * 10.f);
 
-		// --- Timeout output ---
-		outputs[TIMEOUT_OUTPUT].setVoltage(
-			timeoutPulse.process(args.sampleTime) ? 10.f : 0.f);
+		// --- Loop and Clock outputs ---
+		outputs[LOOP_OUTPUT].setVoltage(
+			loopPulse.process(args.sampleTime) ? 10.f : 0.f);
+		outputs[CLOCK_OUTPUT].setVoltage(
+			clockPulse.process(args.sampleTime) ? 10.f : 0.f);
 	}
 };
 
@@ -324,13 +320,12 @@ struct FES8Widget : ModuleWidget {
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-		addParam(createParamCentered<VCVButton>(mm2px(Vec(24.459, 25.297)), module, FES8::START_PARAM));
+		addParam(createLightParamCentered<VCVLightLatch<WhiteLight>>(mm2px(Vec(24.459, 25.297)), module, FES8::RUN_PARAM, FES8::RUN_LIGHT));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(56.618, 47.163)), module, FES8::ATTACK1_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(70.74, 47.156)), module, FES8::ATTACK2_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(84.908, 47.191)), module, FES8::ATTACK3_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(99.034, 47.179)), module, FES8::ATTACK4_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(113.202, 47.214)), module, FES8::ATTACK5_PARAM));
-		addParam(createParamCentered<VCVButton>(mm2px(Vec(24.977, 48.167)), module, FES8::STOP_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(127.363, 47.204)), module, FES8::ATTACK6_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(141.489, 47.192)), module, FES8::ATTACK7_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(155.657, 47.227)), module, FES8::ATTACK8_PARAM));
@@ -362,7 +357,8 @@ struct FES8Widget : ModuleWidget {
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(155.623, 97.99)), module, FES8::AMPLITUDE8_PARAM));
 		addParam(createParamCentered<CKSS>(mm2px(Vec(17.883, 116.031)), module, FES8::COMBINER_PARAM));
 
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(189.284, 75.255)), module, FES8::TIMEOUT_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(189.284, 75.255)), module, FES8::LOOP_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(189.284, 95.770)), module, FES8::CLOCK_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(56.59, 116.567)), module, FES8::OUT1_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(70.819, 116.56)), module, FES8::OUT2_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(85.074, 116.56)), module, FES8::OUT3_OUTPUT));
